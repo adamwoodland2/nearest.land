@@ -97,7 +97,12 @@ function cleanPolarRing(ring) {
   }
   if (coast.length < 3) return ring;
   const u = unwrap(coast).ring;
-  return [...u, [u[u.length - 1][0], POLE_LAT], [u[0][0], POLE_LAT]];
+  // The coast run ends a few degrees short of a full circle (the artificial edge fills the
+  // gap in the data). Bridge to the start point shifted by 360° so the ring covers all
+  // longitudes, then close along the pole — otherwise a thin water wedge shows at the seam.
+  const first = u[0], last = u[u.length - 1];
+  const wrapLon = first[0] + (last[0] > first[0] ? 360 : -360);
+  return [...u, [wrapLon, first[1]], [wrapLon, POLE_LAT], [first[0], POLE_LAT]];
 }
 
 // Colour per country for the globe texture and the chart: spread hues, muted.
