@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nearest Land — what's across the water from any coastline</title>
+  <meta name="description" content="Click any coastline on a 3D globe and see which country lies across the water in every direction — each compass bearing followed along a great circle to its first landfall. Free, runs in your browser." />
+  <meta name="keywords" content="what's across the ocean, across the water, opposite coast, great circle, first landfall, beyond the sea map, what country is across the sea, interactive globe" />
+  <link rel="canonical" href="https://nearest.land/" />
+
+  <meta property="og:type"        content="website" />
+  <meta property="og:url"         content="https://nearest.land/" />
+  <meta property="og:site_name"   content="nearest.land" />
+  <meta property="og:title"       content="Nearest Land — what's across the water from any coastline" />
+  <meta property="og:description" content="Click a coastline on a 3D globe. Every direction over the sea is followed along a great circle to its first landfall — and the answers are not what you'd guess." />
+  <meta property="og:image"       content="https://nearest.land/og-image.png" />
+  <meta property="og:image:width"  content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt"   content="nearest.land — a 360-degree view chart showing which countries lie across the water" />
+  <meta property="og:locale"      content="en_GB" />
+  <meta name="twitter:card"        content="summary_large_image" />
+  <meta name="twitter:title"       content="Nearest Land — what's across the water from any coastline" />
+  <meta name="twitter:description" content="Click a coastline on a 3D globe. Every direction over the sea is followed along a great circle to its first landfall." />
+  <meta name="twitter:image"       content="https://nearest.land/og-image.png" />
+
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <link rel="manifest" href="/manifest.json" />
+  <meta name="theme-color" content="#0a0f1a" />
+  <meta name="robots" content="index, follow" />
+  <link rel="stylesheet" href="styles.css" />
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    "name": "Nearest Land",
+    "url": "https://nearest.land/",
+    "description": "Click any coastline on a 3D globe and see which country lies across the water in every direction, following great circles to the first landfall.",
+    "applicationCategory": "EducationalApplication",
+    "operatingSystem": "Any",
+    "browserRequirements": "Requires JavaScript and WebGL",
+    "inLanguage": "en-GB",
+    "isAccessibleForFree": true,
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "GBP" }
+  }
+  </script>
+</head>
+<body>
+
+<header class="top">
+  <h1 class="brand">nearest<span class="brand-tld">.land</span></h1>
+  <p class="sub">Click a coastline to pick it · right‑drag to turn the globe · scroll to zoom. On touch: tap, drag, pinch. Every direction over the sea is followed along a great circle to its first landfall.</p>
+</header>
+
+<main class="layout">
+  <section class="globe-wrap" aria-label="Globe">
+    <canvas id="globe"></canvas>
+    <div class="labels" id="labels" aria-hidden="true"></div>
+    <div class="tip" id="tip" hidden></div>
+    <div class="overlay" id="loading">
+      <div class="loadbox">
+        <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="progress"><div class="bar" id="bar"></div></div>
+        <p id="loadmsg">Downloading the world&hellip;</p>
+      </div>
+    </div>
+    <div class="presets" id="presets" aria-label="Try a place">
+      <button type="button" data-lat="-31.95" data-lon="115.75">Perth</button>
+      <button type="button" data-lat="50.07" data-lon="-5.70">Land's End</button>
+      <button type="button" data-lat="-34.35" data-lon="18.47">Cape Point</button>
+      <button type="button" data-lat="38.70" data-lon="-9.42">Lisbon</button>
+      <button type="button" data-lat="35.30" data-lon="139.75">Tokyo Bay</button>
+      <button type="button" data-lat="40.57" data-lon="-73.95">New York</button>
+      <button type="button" data-lat="-41.29" data-lon="174.78">Wellington</button>
+      <button type="button" class="locate" id="locate" title="Show where you are on the globe">My location</button>
+    </div>
+  </section>
+
+  <aside class="panel" aria-live="polite">
+    <div class="place" id="place">
+      <p class="hint">Nothing picked yet. Click a coastline on the globe, or try one of the places under it.</p>
+    </div>
+    <div class="chart-wrap">
+      <svg id="chart" viewBox="0 0 360 360" role="img" aria-label="360-degree view over the water"></svg>
+    </div>
+    <p class="legend-head">Clockwise from north</p>
+    <ol class="legend" id="legend"></ol>
+    <p class="note"><strong>Not 100% accurate, by nature.</strong> Land within about 20 km of the shore in a given direction counts as "land in view" and is left blank. The analysis grid is roughly 10 km, so very small islands and narrow straits can be missed, and the exact point you "stand" on is snapped to that grid.</p>
+    <p class="note">There is also no such thing as <em>the</em> coastline. This is the <a href="https://en.wikipedia.org/wiki/Coastline_paradox" target="_blank" rel="noopener">coastline paradox</a>: the finer you measure a coast, the longer it gets, without limit &mdash; every bay contains smaller bays. So any answer depends on the map's level of detail. Here it is Natural Earth's 1:10m outlines (public domain), which is generous for a globe and coarse for a beach.</p>
+    <p class="note contact">Free, open source (MIT), nothing tracked. Questions or corrections: <a href="mailto:adam@nearest.land">adam@nearest.land</a></p>
+  </aside>
+</main>
+
+<script src="lib/topojson-client.min.js"></script>
+<script type="module" src="app.js"></script>
+</body>
+</html>

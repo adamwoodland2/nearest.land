@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
+<rect width="100" height="100" rx="20" fill="#0a0f1a"/>
+<!-- a 360° view chart: coloured sectors over water, a gap where land is -->
+<g transform="translate(50 50)">
+<path d="M0 0 L0 -38 A38 38 0 0 1 32.9 -19 Z" fill="#6ccf9a"/>
+<path d="M0 0 L32.9 -19 A38 38 0 0 1 32.9 19 Z" fill="#d97a5b"/>
+<path d="M0 0 L32.9 19 A38 38 0 0 1 0 38 Z" fill="#c78fe0"/>
+<path d="M0 0 L0 38 A38 38 0 0 1 -26.9 26.9 Z" fill="#e5c95a"/>
+<path d="M0 0 L-26.9 26.9 A38 38 0 0 1 -38 0 Z" fill="#5fb7d9"/>
+<circle r="38" fill="none" stroke="#24304a" stroke-width="2"/>
+<circle r="13" fill="#0a0f1a"/>
+<circle r="4.5" fill="#ffc857"/>
+</g>
+</svg>
