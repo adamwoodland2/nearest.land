@@ -544,6 +544,9 @@ function clearPick() {
   hint.textContent = 'Nothing picked. Click a coastline on the globe, or try one of the places under it.';
   place.appendChild(hint);
   history.replaceState(null, '', location.pathname);
+  $('#share').disabled = true;
+  $('#share').title = 'Pick a coastline first';
+  $('#shareStatus').textContent = '';
 }
 canvas.addEventListener('pointermove', (e) => {
   if (down || !linesGroup.children.length) { tip.hidden = true; return; }
@@ -696,12 +699,10 @@ function pick(lat, lon) {
   const an = document.createElement('p'); an.className = 'coords';
   const fmtLL = (q) => `${Math.abs(q.lat).toFixed(2)}°${q.lat >= 0 ? 'N' : 'S'}, ${Math.abs(q.lon).toFixed(2)}°${q.lon >= 0 ? 'E' : 'W'}`;
   an.textContent = `Antipode: ${fmtLL(res.antipode)} — ${res.antipode.id ? names[res.antipode.id] : 'open ocean'} (purple ring on the globe)`;
-  const share = document.createElement('button');
-  share.type = 'button'; share.className = 'share'; share.id = 'share'; share.textContent = 'Share this view';
-  share.addEventListener('click', shareView);
-  const shareStatus = document.createElement('span'); shareStatus.className = 'share-status'; shareStatus.id = 'shareStatus';
-  const row = document.createElement('p'); row.className = 'share-row'; row.append(share, shareStatus);
-  place.append(nm, co, an, row);
+  place.append(nm, co, an);
+  $('#share').disabled = false;
+  $('#share').title = 'Copy or share a link to this view';
+  $('#shareStatus').textContent = '';
   // The address bar always holds a link to exactly this view.
   history.replaceState(null, '', `?at=${res.at.lat.toFixed(3)},${res.at.lon.toFixed(3)}`);
   // On a stacked (phone) layout the results are below the globe — bring them into view.
@@ -745,6 +746,8 @@ function pickFromUrl() {
   flyTo(lat, lon);
   return true;
 }
+
+$('#share').addEventListener('click', shareView);
 
 for (const b of document.querySelectorAll('#presets button[data-lat]')) {
   b.addEventListener('click', () => {
