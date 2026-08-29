@@ -48,8 +48,57 @@ const names = ['Open ocean', ...features.map((f) => f.properties.name)];
 // Natural Earth's Antarctica polygon stops at about 85.2°S (no coastline data further south),
 // which would leave a hole at the pole. Everything south of that edge is painted as Antarctica.
 const ANT_ID = names.indexOf('Antarctica');
-const ANT_EDGE = -83.5; // the artificial edge wanders between about 84.4°S and 85.2°S; no real coast lies south of 83.5°S
-const capTop = () => Math.floor((90 - ANT_EDGE) / 180 * H); // whole pixel row: no anti-aliased seam
+const ANT_EDGE = -84.3; // the dataset's artificial polar edge lies between 84.5°S and 85.2°S
+const POLE_LAT = -89.95;  // just above the canvas edge: Firefox mis-fills paths that touch it
+
+// Antarctica's mainland ring carries that artificial edge. Rebuild it as a clean ring: the real
+// coast in its original order (rotated to start just after the edge), closed by two points near
+// the pole. One simple polygon, no self-crossing, no edge contact.
+let polarRing = null;
+
+// Even-odd scanline fill of the (unwrapped, lon-increasing) polar ring at `scale` × the map
+// size. Returns the covered rows as a mask: { y0, rows: Uint8Array(rows * width) }.
+function rasterPolar(ring, scale) {
+  const width = W * scale, height = H * scale;
+  const pts = ring.map(([lon, lat]) => [(lon + 180) / 360 * width, (90 - lat) / 180 * height]);
+  let yMin = Infinity, yMax = -Infinity;
+  for (const [, y] of pts) { if (y < yMin) yMin = y; if (y > yMax) yMax = y; }
+  const y0 = Math.max(0, Math.floor(yMin)), y1 = Math.min(height - 1, Math.ceil(yMax));
+  const rows = y1 - y0 + 1;
+  const mask = new Uint8Array(rows * width);
+  const xs = [];
+  for (let row = 0; row < rows; row++) {
+    const yc = y0 + row + 0.5;
+    xs.length = 0;
+    for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+      const [xa, ya] = pts[j], [xb, yb] = pts[i];
+      if ((ya <= yc) !== (yb <= yc)) xs.push(xa + (yc - ya) * (xb - xa) / (yb - ya));
+    }
+    xs.sort((a, b) => a - b);
+    for (let k = 0; k + 1 < xs.length; k += 2) {
+      const from = Math.round(xs[k]), to = Math.round(xs[k + 1]);
+      for (let x = from; x < to; x++) mask[row * width + ((x % width) + width) % width] = 1;
+    }
+  }
+  return { y0, rows, mask };
+}
+
+function cleanPolarRing(ring) {
+  const isEdge = ([, lat]) => lat <= ANT_EDGE;
+  if (!ring.some(isEdge)) return ring;
+  const n = ring.length;
+  let start = ring.findIndex((pt, i) => !isEdge(pt) && isEdge(ring[(i - 1 + n) % n]));
+  if (start < 0) return ring;
+  const coast = [];
+  for (let i = 0; i < n; i++) {
+    const pt = ring[(start + i) % n];
+    if (isEdge(pt)) break;
+    coast.push(pt);
+  }
+  if (coast.length < 3) return ring;
+  const u = unwrap(coast).ring;
+  return [...u, [u[u.length - 1][0], POLE_LAT], [u[0][0], POLE_LAT]];
+}
 
 // Colour per country for the globe texture and the chart: spread hues, muted.
 const palette = names.map((_, i) => (i === 0 ? '#9aa3b2' : `hsl(${Math.round((i * 137.508) % 360)}, 42%, 58%)`));
@@ -67,25 +116,34 @@ function unwrap(ring) {
   }
   return { ring: out, crosses };
 }
-function projectRing(ctx, ring, dx = 0) {
+// sx scales W×H map units to the target canvas (2 for the 8192-wide texture). Done here rather
+// than with ctx.scale(): Firefox's canvas rasteriser fills Antarctica's huge path as a solid
+// band when a transform is active.
+function projectRing(ctx, ring, dx = 0, sx = 1) {
   ring.forEach(([lon, lat], k) => {
-    const x = (lon + 180) / 360 * W + dx, y = (90 - lat) / 180 * H;
+    const x = ((lon + 180) / 360 * W + dx) * sx, y = (90 - lat) / 180 * H * sx;
     k ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
   });
   ctx.closePath();
 }
 function polygonsOf(f) {
   const polys = f.geometry.type === 'Polygon' ? [f.geometry.coordinates] : f.geometry.coordinates;
-  return polys.map((poly) => {
+  const polar = f.properties.name === 'Antarctica';
+  return polys.filter((poly) => {
+    // The mainland (the polygon carrying the artificial polar edge) is rasterised in JS —
+    // see rasterPolar — because Firefox's GPU canvas mis-fills it. Islands stay here.
+    if (polar && poly[0].some(([, lat]) => lat <= ANT_EDGE)) { polarRing = cleanPolarRing(poly[0]); return false; }
+    return true;
+  }).map((poly) => {
     const rings = poly.map(unwrap);
     return { rings: rings.map((r) => r.ring), offsets: rings.some((r) => r.crosses) ? [0, -W, W] : [0] };
   });
 }
-function drawFeature(ctx, f) {
+function drawFeature(ctx, f, sx = 1) {
   for (const poly of polygonsOf(f)) {
     for (const dx of poly.offsets) {
       ctx.beginPath();
-      for (const ring of poly.rings) projectRing(ctx, ring, dx);
+      for (const ring of poly.rings) projectRing(ctx, ring, dx, sx);
       ctx.fill('evenodd');
     }
   }
@@ -120,8 +178,6 @@ function buildIndex() {
   const ctx = c.getContext('2d', { willReadFrequently: true });
   ctx.fillStyle = '#000';
   ctx.fillRect(0, 0, W, H);
-  // Polar cap first, so Antarctica's own polygon paints over it with no anti-aliased seam.
-  if (ANT_ID > 0) { ctx.fillStyle = `rgb(${ANT_ID},${(ANT_ID * 97 + 31) & 255},255)`; ctx.fillRect(0, capTop(), W, H - capTop()); }
   features.forEach((f, i) => {
     const id = i + 1;
     ctx.fillStyle = `rgb(${id},${(id * 97 + 31) & 255},255)`;
@@ -130,11 +186,13 @@ function buildIndex() {
   const px = ctx.getImageData(0, 0, W, H).data;
   const idx = new Uint16Array(W * H);
   const ok = new Uint8Array(W * H);
+  const polar = polarRing ? rasterPolar(polarRing, 1) : null;
   for (let p = 0, q = 0; p < W * H; p++, q += 4) {
     const r = px[q], g = px[q + 1], b = px[q + 2];
     if (b === 0 && r === 0 && g === 0) { ok[p] = 1; idx[p] = 0; continue; }            // water
     if (b === 255 && g === ((r * 97 + 31) & 255)) { ok[p] = 1; idx[p] = r; }             // exact
   }
+  if (polar) for (let i = 0; i < polar.rows * W; i++) if (polar.mask[i]) { const p = (polar.y0) * W + i; idx[p] = ANT_ID; ok[p] = 1; }
   const counts = new Map();
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
     const p = y * W + x;
@@ -153,6 +211,11 @@ function buildIndex() {
   return idx;
 }
 
+function hslToRgb(h, s, l) {
+  const f = (n) => { const k = (n + h / 30) % 12; const a = s * Math.min(l, 1 - l); return Math.round(255 * (l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1)))); };
+  return [f(0), f(8), f(4)];
+}
+
 function buildTexture(tw) {
   const k = tw / W;
   const c = document.createElement('canvas');
@@ -160,9 +223,19 @@ function buildTexture(tw) {
   const ctx = c.getContext('2d');
   ctx.fillStyle = '#0e2a47';
   ctx.fillRect(0, 0, c.width, c.height);
-  ctx.scale(k, k);
-  if (ANT_ID > 0) { ctx.fillStyle = palette[ANT_ID]; ctx.fillRect(0, capTop(), W, H - capTop()); }
-  features.forEach((f, i) => { ctx.fillStyle = palette[i + 1]; drawFeature(ctx, f); });
+  features.forEach((f, i) => { ctx.fillStyle = palette[i + 1]; drawFeature(ctx, f, k); });
+  if (polarRing) {
+    const polar = rasterPolar(polarRing, k);
+    const img = ctx.createImageData(c.width, polar.rows);
+    const m = /hsl\((\d+), (\d+)%, (\d+)%\)/.exec(palette[ANT_ID]);
+    const [cr, cg, cb] = hslToRgb(+m[1], +m[2] / 100, +m[3] / 100);
+    for (let i = 0; i < polar.rows * c.width; i++) if (polar.mask[i]) { const q = i * 4; img.data[q] = cr; img.data[q + 1] = cg; img.data[q + 2] = cb; img.data[q + 3] = 255; }
+    // Composite through a temporary canvas: putImageData would replace the water with transparent black.
+    const tmpC = document.createElement('canvas');
+    tmpC.width = c.width; tmpC.height = polar.rows;
+    tmpC.getContext('2d').putImageData(img, 0, 0);
+    ctx.drawImage(tmpC, 0, polar.y0);
+  }
   return c;
 }
 
@@ -291,10 +364,35 @@ controls.mouseButtons = { LEFT: null, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MO
 
 // Display texture: 8192 wide where the GPU and memory allow (about 130 MB), else 4096.
 const lowMem = (navigator.deviceMemory && navigator.deviceMemory < 4) || /Mobi|Android/i.test(navigator.userAgent);
-const TEX_W = renderer.capabilities.maxTextureSize >= 8192 && !lowMem ? 8192 : 4096;
+const forcedTex = parseInt(new URLSearchParams(location.search).get('tex') || '', 10);
+const TEX_W = forcedTex === 4096 || forcedTex === 8192 ? forcedTex : (renderer.capabilities.maxTextureSize >= 8192 && !lowMem ? 8192 : 4096);
 const texture = new THREE.CanvasTexture(buildTexture(TEX_W));
 texture.colorSpace = THREE.SRGBColorSpace;
-texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+const maxAniso = renderer.capabilities.getMaxAnisotropy();
+texture.anisotropy = maxAniso;
+// Near the poles one sphere triangle spans a whole texture row, so mipmapping picks a very
+// coarse level there; without anisotropic filtering that renders the polar cap as a flat disc
+// (seen in Firefox on some Windows GPU stacks). If anisotropy is unavailable, skip mipmaps.
+const qs = new URLSearchParams(location.search);
+const noMip = qs.has('nomip') || maxAniso < 4;
+if (noMip) {
+  texture.generateMipmaps = false;
+  texture.minFilter = THREE.LinearFilter;
+}
+if (qs.has('debug')) {
+  const dbg = document.createElement('p');
+  dbg.className = 'sub';
+  dbg.textContent = `debug: texture ${TEX_W}px · anisotropy ${maxAniso} · mipmaps ${!noMip} · maxTexture ${renderer.capabilities.maxTextureSize} · ${navigator.userAgent}`;
+  document.querySelector('.top').appendChild(dbg);
+  // Raw texture rows for the southern band (55°S to the pole), straight from the 2D canvas —
+  // separates a canvas-fill problem from a WebGL-sampling problem.
+  const src = texture.image, th = src.height, y0 = Math.floor((90 + 55) / 180 * th);
+  const strip = document.createElement('canvas');
+  strip.width = 1200; strip.height = Math.round((th - y0) * 1200 / src.width);
+  strip.getContext('2d').drawImage(src, 0, y0, src.width, th - y0, 0, 0, strip.width, strip.height);
+  strip.className = 'debug-strip';
+  document.querySelector('.top').appendChild(strip);
+}
 const globe = new THREE.Mesh(new THREE.SphereGeometry(1, 128, 96), new THREE.MeshBasicMaterial({ map: texture }));
 scene.add(globe);
 await progress(88, 'Drawing coastlines and borders…');
@@ -428,10 +526,25 @@ canvas.addEventListener('pointerup', (e) => {
   if (moved > (e.pointerType === 'touch' ? 12 : 5)) return;
   raycaster.setFromCamera(ndcOf(e), camera);
   const hit = raycaster.intersectObject(globe)[0];
-  if (!hit) return;
+  if (!hit) { clearPick(); return; } // clicked off the globe: clear the selection
   const { lat, lon } = fromVec(hit.point);
   pick(lat, lon);
 });
+
+function clearPick() {
+  if (!marker.visible) return;
+  marker.visible = antiMarker.visible = false;
+  linesGroup.clear();
+  svg.replaceChildren();
+  $('#legend').replaceChildren();
+  hlRun = -1;
+  const place = $('#place');
+  place.replaceChildren();
+  const hint = document.createElement('p'); hint.className = 'hint';
+  hint.textContent = 'Nothing picked. Click a coastline on the globe, or try one of the places under it.';
+  place.appendChild(hint);
+  history.replaceState(null, '', location.pathname);
+}
 canvas.addEventListener('pointermove', (e) => {
   if (down || !linesGroup.children.length) { tip.hidden = true; return; }
   raycaster.setFromCamera(ndcOf(e), camera);
@@ -583,7 +696,14 @@ function pick(lat, lon) {
   const an = document.createElement('p'); an.className = 'coords';
   const fmtLL = (q) => `${Math.abs(q.lat).toFixed(2)}°${q.lat >= 0 ? 'N' : 'S'}, ${Math.abs(q.lon).toFixed(2)}°${q.lon >= 0 ? 'E' : 'W'}`;
   an.textContent = `Antipode: ${fmtLL(res.antipode)} — ${res.antipode.id ? names[res.antipode.id] : 'open ocean'} (purple ring on the globe)`;
-  place.append(nm, co, an);
+  const share = document.createElement('button');
+  share.type = 'button'; share.className = 'share'; share.id = 'share'; share.textContent = 'Share this view';
+  share.addEventListener('click', shareView);
+  const shareStatus = document.createElement('span'); shareStatus.className = 'share-status'; shareStatus.id = 'shareStatus';
+  const row = document.createElement('p'); row.className = 'share-row'; row.append(share, shareStatus);
+  place.append(nm, co, an, row);
+  // The address bar always holds a link to exactly this view.
+  history.replaceState(null, '', `?at=${res.at.lat.toFixed(3)},${res.at.lon.toFixed(3)}`);
   // On a stacked (phone) layout the results are below the globe — bring them into view.
   if (window.innerWidth < 860) document.querySelector('.panel').scrollIntoView({ behavior: 'smooth', block: 'start' });
   return res;
@@ -592,6 +712,38 @@ function pick(lat, lon) {
 function flyTo(lat, lon) {
   camera.position.copy(toVec(lat, lon, camera.position.length()));
   controls.update();
+}
+
+async function shareView() {
+  const url = location.href;
+  const status = $('#shareStatus');
+  const title = document.title;
+  const text = ($('#place .name') || {}).textContent || 'Nearest Land';
+  if (navigator.share) {
+    try { await navigator.share({ title, text, url }); return; } catch (e) { if (e.name === 'AbortError') return; }
+  }
+  try {
+    await navigator.clipboard.writeText(url);
+    status.textContent = 'Link copied';
+  } catch (e) {
+    status.textContent = url;
+  }
+  setTimeout(() => { if (status.textContent === 'Link copied') status.textContent = ''; }, 2500);
+}
+
+// A shared link (?at=lat,lon) reopens the same view.
+function pickFromUrl() {
+  // An installed app launches with whatever URL was on screen when it was added — replaying a
+  // pick every launch (and scrolling to it) is not what anyone wants, so standalone ignores ?at.
+  const standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  if (standalone) { if (location.search) history.replaceState(null, '', location.pathname); return false; }
+  const m = /^(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)$/.exec(new URLSearchParams(location.search).get('at') || '');
+  if (!m) return false;
+  const lat = parseFloat(m[1]), lon = parseFloat(m[2]);
+  if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return false;
+  pick(lat, lon);
+  flyTo(lat, lon);
+  return true;
 }
 
 for (const b of document.querySelectorAll('#presets button[data-lat]')) {
@@ -633,6 +785,7 @@ if (navigator.permissions && navigator.permissions.query) {
 
 await progress(100, 'Ready');
 $('#loading').hidden = true;
+pickFromUrl();
 
 // PWA: offline cache + installability (sw.js). Registered only where service workers exist;
 // localhost is allowed for testing.
@@ -641,4 +794,4 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
 }
 
 // Read-only test hook.
-window.__ATW = { analyze, pick, names, landAt, texW: TEX_W, cam: () => camera.position, borders: () => borders, globe, tex: () => texture.image, labels: () => labels.filter((l) => !l.el.hidden).map((l) => l.el.textContent), showGps, highlightRun };
+window.__ATW = { analyze, pick, names, landAt, texW: TEX_W, cam: () => camera.position, borders: () => borders, globe, tex: () => texture.image, aniso: maxAniso, mipmaps: texture.generateMipmaps, labels: () => labels.filter((l) => !l.el.hidden).map((l) => l.el.textContent), showGps, highlightRun };

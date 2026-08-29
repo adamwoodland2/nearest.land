@@ -18,6 +18,8 @@ Free, runs entirely in your browser, no account, no adverts.
 - Paths continue past the antipode until they hit land. The antipode itself is marked and
   named.
 - Country names on the globe, decluttered by zoom; crisp vector coastlines at any zoom.
+- **Share this view** — every pick puts `?at=lat,lon` in the address bar; the Share button uses
+  the native share sheet where available, otherwise copies the link.
 
 Why great circles: "straight out to sea" on a sphere is not a line of latitude. That is why
 parts of the US east coast face Australia and Land's End faces Brazil.

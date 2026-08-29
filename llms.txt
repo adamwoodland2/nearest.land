@@ -11,6 +11,7 @@ Technical: static site, three.js, MIT licensed, installable PWA that works offli
 ## Links
 
 - [Globe](https://nearest.land/): the app
+- [Shared view](https://nearest.land/?at=50.14,-5.41): `?at=lat,lon` opens the page with that coastline already picked (this example is Land's End)
 
 ## Related
 

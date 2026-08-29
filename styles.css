@@ -22,6 +22,7 @@ body {
 .top h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
 .brand-tld { color: var(--accent); font-weight: 600; }
 .top .sub { color: var(--muted); font-size: 14px; }
+.debug-strip { width: 100%; max-width: 1200px; border: 1px solid var(--line); display: block; }
 
 .layout {
   flex: 1;
@@ -31,8 +32,16 @@ body {
   min-height: 0;
 }
 @media (max-width: 860px) {
-  .layout { grid-template-columns: 1fr; }
-  .globe-wrap { height: 60vh; }
+  /* Phones: the page scrolls as a whole; the globe takes a fixed share of the screen and the
+     results flow underneath at full height (no inner scrolling strip). */
+  html, body { height: auto; min-height: 100%; }
+  body { display: block; }
+  .top { padding: 12px 16px 6px; }
+  .top .sub { font-size: 12.5px; }
+  .layout { display: block; }
+  .globe-wrap { height: 56vh; min-height: 300px; }
+  .panel { overflow: visible; border-left: 0; border-top: 1px solid var(--line); padding: 16px 16px 28px; }
+  #chart { width: min(100%, 300px); }
 }
 
 .globe-wrap { position: relative; min-height: 420px; }
@@ -95,6 +104,14 @@ body {
 .place .name { font-size: 18px; font-weight: 700; }
 .place .coords { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
 .place .hint { color: var(--muted); }
+.share-row { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+.share {
+  font: inherit; font-size: 13px; font-weight: 600;
+  color: var(--bg); background: var(--accent); border: 0; border-radius: 999px;
+  padding: 6px 14px; cursor: pointer;
+}
+.share:hover { filter: brightness(1.08); }
+.share-status { font-size: 12.5px; color: var(--muted); word-break: break-all; }
 
 .chart-wrap { display: grid; place-items: center; }
 #chart { width: min(100%, 340px); height: auto; }
