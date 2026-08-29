@@ -42,6 +42,14 @@ body {
   .globe-wrap { height: 56vh; min-height: 300px; }
   .panel { overflow: visible; border-left: 0; border-top: 1px solid var(--line); padding: 16px 16px 28px; }
   #chart { width: min(100%, 300px); }
+  /* Header on phones: wordmark + Share on one line, the hint underneath. */
+  .top { gap: 8px 12px; }
+  .viewlink-wrap { order: 1; margin-left: auto; }
+  .top .sub { order: 2; flex-basis: 100%; }
+  /* Jump box and location button share one line: the select shrinks, the button doesn't. */
+  .presets { flex-wrap: nowrap; }
+  .presets select { flex: 1 1 0; min-width: 0; max-width: none; font-size: 12.5px; }
+  .presets button.locate { flex: 0 0 auto; font-size: 12px; }
 }
 
 .globe-wrap { position: relative; min-height: 420px; }
