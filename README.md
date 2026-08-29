@@ -20,6 +20,8 @@ Free, runs entirely in your browser, no account, no adverts.
 - Country names on the globe, decluttered by zoom; crisp vector coastlines at any zoom.
 - **Share this view** — every pick puts `?at=lat,lon` in the address bar; the Share button uses
   the native share sheet where available, otherwise copies the link.
+- **Show Me** (phones with a compass) — stand by the sea, tap it, and as you turn the phone the
+  panel names the country across the water in the direction you face.
 
 Why great circles: "straight out to sea" on a sphere is not a line of latitude. That is why
 parts of the US east coast face Australia and Land's End faces Brazil.
