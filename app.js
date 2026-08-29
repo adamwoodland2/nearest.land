@@ -796,28 +796,139 @@ $('#jump').addEventListener('change', (e) => {
 
 // ---------------------------------------------------------------- device location
 
+// ---------------------------------------------------------------- device location + compass
+//
+// The button exists only on devices that can give both a position and a compass heading:
+// iOS (DeviceOrientationEvent.requestPermission) or Android-style absolute orientation on a
+// touch device. It reads "Request Location" until a fix arrives, then "Show Me", which opens
+// the compass panel. The blue dot still appears automatically when permission is already
+// granted, button or not.
 const locateBtn = $('#locate');
+const hasGeo = !!navigator.geolocation;
+const iosCompass = typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function';
+const absCompass = 'ondeviceorientationabsolute' in window && navigator.maxTouchPoints > 0;
+const directionCapable = iosCompass || absCompass;
+let gpsPos = null;
+if (hasGeo && directionCapable) locateBtn.hidden = false;
+
 function showGps(lat, lon) {
+  gpsPos = { lat, lon };
   gpsDot.position.copy(toVec(lat, lon, 1.008));
   gpsRing.position.copy(toVec(lat, lon, 1.009));
   gpsRing.lookAt(0, 0, 0);
   gpsDot.visible = gpsRing.visible = true;
   locateBtn.classList.add('on');
-  locateBtn.textContent = 'My location';
+  locateBtn.textContent = 'Show Me';
+  locateBtn.title = 'Point your phone at the sea and see which country is in front of you';
 }
 function requestGps(fly) {
-  if (!navigator.geolocation) { locateBtn.textContent = 'No location'; return; }
+  if (!hasGeo) return;
   locateBtn.textContent = 'Locating…';
   navigator.geolocation.getCurrentPosition(
     (pos) => { showGps(pos.coords.latitude, pos.coords.longitude); if (fly) flyTo(pos.coords.latitude, pos.coords.longitude); },
     () => { locateBtn.textContent = 'Location unavailable'; },
-    { enableHighAccuracy: false, timeout: 10000, maximumAge: 600000 }
+    { enableHighAccuracy: true, timeout: 12000, maximumAge: 120000 }
   );
 }
 locateBtn.addEventListener('click', () => {
-  if (gpsDot.visible) { flyTo(...Object.values(fromVec(gpsDot.position))); return; }
-  requestGps(true);
+  if (gpsPos) openCompass();
+  else requestGps(true);
 });
+
+// Haversine distance in km.
+function distKm(a, b) {
+  const dLat = (b.lat - a.lat) * DEG, dLon = (b.lon - a.lon) * DEG;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * DEG) * Math.cos(b.lat * DEG) * Math.sin(dLon / 2) ** 2;
+  return 2 * R_EARTH * Math.asin(Math.sqrt(h));
+}
+
+const compass = {
+  el: $('#compass'), dial: $('#compassDial'), ring: $('#compassRing'), headingEl: $('#compassHeading'),
+  countryEl: $('#compassCountry'), noteEl: $('#compassNote'),
+  res: null, heading: null, listener: null, eventName: null, timer: null,
+};
+{ // tick marks every 10°, longer every 30°
+  const g = document.getElementById('compassTicks');
+  for (let a = 0; a < 360; a += 10) {
+    if (a % 90 === 0) continue;
+    const len = a % 30 === 0 ? 10 : 5;
+    const t = document.createElementNS(NS, 'line');
+    const r0 = 92 - len, r1 = 92, rad = a * DEG;
+    t.setAttribute('x1', 100 + r0 * Math.sin(rad)); t.setAttribute('y1', 100 - r0 * Math.cos(rad));
+    t.setAttribute('x2', 100 + r1 * Math.sin(rad)); t.setAttribute('y2', 100 - r1 * Math.cos(rad));
+    t.setAttribute('class', 'tick');
+    g.appendChild(t);
+  }
+}
+
+async function openCompass() {
+  const res = analyze(gpsPos.lat, gpsPos.lon);
+  compass.res = res;
+  compass.heading = null;
+  compass.el.hidden = false;
+  compass.headingEl.textContent = '—';
+  const shoreKm = res ? distKm(gpsPos, res.at) : Infinity;
+  if (!res || shoreKm > 30) {
+    compass.dial.classList.add('noarrow');
+    compass.countryEl.textContent = 'You need to be near the water';
+    compass.noteEl.textContent = res ? `The nearest shore is about ${Math.round(shoreKm)} km away. Get within sight of the sea and try again.` : 'No coastline found near you.';
+    return;
+  }
+  compass.dial.classList.remove('noarrow');
+  compass.countryEl.textContent = 'Point your phone at the sea';
+  compass.noteEl.textContent = shoreKm > 15 ? `Using the ${names[res.home]} shore about ${Math.round(shoreKm)} km from you. Turn slowly.` : `Standing at the ${names[res.home]} shore. Turn slowly.`;
+
+  // Heading source: iOS needs permission inside this tap; Android gives absolute alpha.
+  if (iosCompass) {
+    try {
+      const state = await DeviceOrientationEvent.requestPermission();
+      if (state !== 'granted') { compass.noteEl.textContent = 'Compass permission was not granted — allow Motion & Orientation access and try again.'; return; }
+    } catch (e) { compass.noteEl.textContent = 'Compass permission was not granted.'; return; }
+    compass.eventName = 'deviceorientation';
+  } else {
+    compass.eventName = 'deviceorientationabsolute';
+  }
+  compass.listener = onOrientation;
+  window.addEventListener(compass.eventName, compass.listener);
+  clearTimeout(compass.timer);
+  compass.timer = setTimeout(() => {
+    if (compass.heading === null) compass.noteEl.textContent = 'No compass reading yet — move the phone in a figure of eight to calibrate, and make sure location and motion access are allowed.';
+  }, 4000);
+}
+
+function onOrientation(e) {
+  let h = null;
+  if (typeof e.webkitCompassHeading === 'number' && !Number.isNaN(e.webkitCompassHeading)) h = e.webkitCompassHeading;
+  else if (e.absolute && typeof e.alpha === 'number') h = (360 - e.alpha) % 360;
+  if (h === null) return;
+  // Account for landscape rotation of the screen.
+  const angle = (screen.orientation && typeof screen.orientation.angle === 'number') ? screen.orientation.angle : (window.orientation || 0);
+  h = (h + angle + 360) % 360;
+  // Light smoothing across the 0/360 wrap.
+  if (compass.heading === null) compass.heading = h;
+  else { let d = ((h - compass.heading + 540) % 360) - 180; compass.heading = (compass.heading + d * 0.35 + 360) % 360; }
+  updateCompass();
+}
+
+function updateCompass() {
+  const h = compass.heading, res = compass.res;
+  compass.ring.style.transform = `rotate(${-h}deg)`;
+  compass.headingEl.textContent = `Facing ${Math.round(h)}°`;
+  const idx = Math.round(h / res.step) % res.view.length;
+  const v = res.view[idx];
+  if (!v) { compass.countryEl.textContent = 'Land that way'; compass.noteEl.textContent = 'Turn towards the water.'; return; }
+  compass.countryEl.textContent = names[v.id];
+  compass.noteEl.textContent = `${fmtKm(v.km)} across the water on this bearing${v.km > ANTIPODE_KM ? ' (beyond the antipode)' : ''}.`;
+}
+
+function closeCompass() {
+  compass.el.hidden = true;
+  if (compass.listener) window.removeEventListener(compass.eventName, compass.listener);
+  compass.listener = null;
+  clearTimeout(compass.timer);
+}
+$('#compassClose').addEventListener('click', closeCompass);
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !compass.el.hidden) closeCompass(); });
 // Show the blue dot without asking if permission was already granted earlier.
 if (navigator.permissions && navigator.permissions.query) {
   navigator.permissions.query({ name: 'geolocation' }).then((p) => { if (p.state === 'granted') requestGps(false); }).catch(() => {});
@@ -834,4 +945,4 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
 }
 
 // Read-only test hook.
-window.__ATW = { analyze, pick, names, landAt, texW: TEX_W, cam: () => camera.position, borders: () => borders, globe, tex: () => texture.image, aniso: maxAniso, mipmaps: texture.generateMipmaps, labels: () => labels.filter((l) => !l.el.hidden).map((l) => l.el.textContent), showGps, highlightRun };
+window.__ATW = { analyze, pick, names, landAt, texW: TEX_W, cam: () => camera.position, borders: () => borders, globe, tex: () => texture.image, aniso: maxAniso, mipmaps: texture.generateMipmaps, compass: { open: openCompass, close: closeCompass, state: () => ({ heading: compass.heading, country: compass.countryEl.textContent, note: compass.noteEl.textContent, hidden: compass.el.hidden, noarrow: compass.dial.classList.contains('noarrow') }) }, capable: { hasGeo, directionCapable }, labels: () => labels.filter((l) => !l.el.hidden).map((l) => l.el.textContent), showGps, highlightRun };

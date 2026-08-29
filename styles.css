@@ -89,6 +89,33 @@ body {
 .presets select option, .presets select optgroup { background: #111827; color: var(--ink); font-weight: 400; }
 .presets button.locate { margin-left: auto; border-color: #3b82f6; color: #bfdbfe; }
 .presets button.locate.on { background: #1d4ed8; color: #fff; }
+.presets button.locate[hidden] { display: none; }
+
+/* Compass mode: full-screen overlay, arrow always points the way the phone's top faces. */
+.compass {
+  position: fixed; inset: 0; z-index: 20;
+  background: var(--bg);
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px;
+}
+.compass[hidden] { display: none; }
+.compass-close {
+  position: absolute; top: 14px; right: 14px;
+  width: 44px; height: 44px; border-radius: 50%;
+  font: inherit; font-size: 26px; line-height: 1;
+  color: var(--ink); background: var(--panel); border: 1px solid var(--line); cursor: pointer;
+}
+.compass-body { display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center; max-width: 420px; width: 100%; }
+.compass-dial { position: relative; width: min(70vw, 300px); aspect-ratio: 1; }
+.compass-ring { position: absolute; inset: 0; width: 100%; height: 100%; transition: transform 0.12s linear; }
+.compass-ring .compass-n { fill: var(--accent); font-size: 18px; font-weight: 700; }
+.compass-ring .compass-l { fill: var(--muted); font-size: 14px; font-weight: 600; }
+.compass-ring .tick { stroke: #3b4661; stroke-width: 2; }
+.compass-arrow { position: absolute; inset: 22%; width: 56%; height: 56%; }
+.compass-dial.noarrow .compass-arrow { display: none; }
+.compass-heading { font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.compass-country { font-size: 24px; font-weight: 700; line-height: 1.25; min-height: 2.5em; }
+.compass-note { font-size: 14px; color: var(--muted); max-width: 34ch; }
 
 /* Country labels: HTML overlay projected from the globe each frame. */
 .labels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }

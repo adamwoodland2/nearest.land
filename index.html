@@ -58,6 +58,28 @@
   <section class="globe-wrap" aria-label="Globe">
     <canvas id="globe"></canvas>
     <div class="labels" id="labels" aria-hidden="true"></div>
+    <div class="compass" id="compass" hidden role="dialog" aria-label="Which country is in front of you">
+      <button type="button" class="compass-close" id="compassClose" aria-label="Close">×</button>
+      <div class="compass-body">
+        <div class="compass-dial" id="compassDial">
+          <svg class="compass-ring" id="compassRing" viewBox="0 0 200 200" aria-hidden="true">
+            <circle cx="100" cy="100" r="92" fill="none" stroke="#24304a" stroke-width="2"/>
+            <g id="compassTicks"></g>
+            <text x="100" y="26" text-anchor="middle" class="compass-n">N</text>
+            <text x="180" y="105" text-anchor="middle" class="compass-l">E</text>
+            <text x="100" y="184" text-anchor="middle" class="compass-l">S</text>
+            <text x="20" y="105" text-anchor="middle" class="compass-l">W</text>
+          </svg>
+          <svg class="compass-arrow" viewBox="0 0 100 100" aria-hidden="true">
+            <path d="M50 8 L72 60 L50 50 L28 60 Z" fill="#ffc857"/>
+            <rect x="46" y="50" width="8" height="42" rx="3" fill="#ffc857"/>
+          </svg>
+        </div>
+        <p class="compass-heading" id="compassHeading">—</p>
+        <p class="compass-country" id="compassCountry">Point your phone at the sea</p>
+        <p class="compass-note" id="compassNote"></p>
+      </div>
+    </div>
     <div class="tip" id="tip" hidden></div>
     <div class="overlay" id="loading">
       <div class="loadbox">
@@ -86,7 +108,7 @@
           <option value="-37.11,-12.28">Tristan da Cunha, South Atlantic</option>
         </optgroup>
       </select>
-      <button type="button" class="locate" id="locate" title="Show where you are on the globe">My location</button>
+      <button type="button" class="locate" id="locate" hidden>Request Location</button>
     </div>
   </section>
 
