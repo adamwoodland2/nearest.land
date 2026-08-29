@@ -97,9 +97,17 @@
     <div class="chart-wrap">
       <svg id="chart" viewBox="0 0 360 360" role="img" aria-label="360-degree view over the water"></svg>
     </div>
-    <p class="legend-head">Clockwise from north</p>
+    <p class="legend-head">Clockwise from north
+      <label class="step-ctl">Sampling
+        <select id="step" aria-label="Bearing sampling step">
+          <option value="1">1°</option>
+          <option value="0.5">0.5°</option>
+          <option value="0.25">0.25°</option>
+        </select>
+      </label>
+    </p>
     <ol class="legend" id="legend"></ol>
-    <p class="note"><strong>Not 100% accurate, by nature.</strong> Land within about 20 km of the shore in a given direction counts as "land in view" and is left blank. The analysis grid is roughly 10 km, so very small islands and narrow straits can be missed, and the exact point you "stand" on is snapped to that grid. Directions are sampled every 1°, and one degree of bearing spreads to about 90 km at 5,000 km and 260 km at 15,000 km &mdash; so a distant island narrower than that can slip between two bearings and go unreported.</p>
+    <p class="note"><strong>Not 100% accurate, by nature.</strong> Land within about 20 km of the shore in a given direction counts as "land in view" and is left blank. The analysis grid is roughly 10 km, so very small islands and narrow straits can be missed, and the exact point you "stand" on is snapped to that grid. Directions are sampled every 1° by default, and one degree of bearing spreads to about 90 km at 5,000 km and 260 km at 15,000 km &mdash; so a distant island narrower than that can slip between two bearings. The sampling control above the list tightens that to 0.5° or 0.25° for a little more compute.</p>
     <p class="note">There is also no such thing as <em>the</em> coastline. This is the <a href="https://en.wikipedia.org/wiki/Coastline_paradox" target="_blank" rel="noopener">coastline paradox</a>: the finer you measure a coast, the longer it gets, without limit &mdash; every bay contains smaller bays. So any answer depends on the map's level of detail. Here it is Natural Earth's 1:10m outlines (public domain), which is generous for a globe and coarse for a beach.</p>
     <p class="note contact">Free, open source (MIT), nothing tracked. Questions or corrections: <a href="mailto:adam@nearest.land">adam@nearest.land</a></p>
   </aside>

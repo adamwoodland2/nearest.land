@@ -319,7 +319,15 @@ function homeCountry(p) {
 
 // ---------------------------------------------------------------- analysis
 
-const runWidth = (run) => (run.wrap ? 360 - run.start + run.end + 1 : run.end - run.start + 1);
+// Bearing sampling step in degrees (1, 0.5 or 0.25). Finer steps catch narrower distant
+// targets at proportionally more compute.
+let STEP = 1;
+try { STEP = parseFloat(localStorage.getItem('nl-step')) || 1; } catch (e) { /* ignore */ }
+const stepFromUrl = parseFloat(new URLSearchParams(location.search).get('step') || '');
+if ([1, 0.5, 0.25].includes(stepFromUrl)) STEP = stepFromUrl;
+if (![1, 0.5, 0.25].includes(STEP)) STEP = 1;
+const runWidth = (run) => run.count * STEP;                       // degrees
+const fmtDeg = (d) => `${Number.isInteger(d) ? d : +d.toFixed(2)}°`;
 
 function analyze(lat, lon) {
   const p = snapToShore(lat, lon);
@@ -328,26 +336,29 @@ function analyze(lat, lon) {
   const home = homeCountry(p);
   const antipode = { lat: -at.lat, lon: ((at.lon + 360) % 360) - 180 };
   antipode.id = landAt(antipode.lat, antipode.lon);
-  const view = new Array(360);
-  for (let b = 0; b < 360; b++) view[b] = march(at.lat, at.lon, b);
-  // Contiguous runs of the same destination.
+  const N = Math.round(360 / STEP);
+  const view = new Array(N);
+  for (let i = 0; i < N; i++) view[i] = march(at.lat, at.lon, i * STEP);
+  // Contiguous runs of the same destination. start/end are bearings in degrees; count is
+  // the number of samples in the run.
   const runs = [];
-  for (let b = 0; b < 360; b++) {
-    const v = view[b];
+  for (let i = 0; i < N; i++) {
+    const v = view[i];
     if (!v) continue;
     const last = runs[runs.length - 1];
-    if (last && last.id === v.id && last.end === b - 1) { last.end = b; last.km = Math.min(last.km, v.km); }
-    else runs.push({ id: v.id, start: b, end: b, km: v.km, wrap: false });
+    if (last && last.id === v.id && last.endI === i - 1) { last.endI = i; last.count++; last.km = Math.min(last.km, v.km); }
+    else runs.push({ id: v.id, startI: i, endI: i, count: 1, km: v.km, wrap: false });
   }
-  // Join a run that wraps through 359 -> 0, then order clockwise from north (the wrapping
-  // run contains north, so it goes first).
-  if (runs.length > 1 && runs[0].start === 0 && runs[runs.length - 1].end === 359 && runs[0].id === runs[runs.length - 1].id) {
+  // Join a run that wraps through north, then order clockwise from north (the wrapping run
+  // contains north, so it goes first).
+  if (runs.length > 1 && runs[0].startI === 0 && runs[runs.length - 1].endI === N - 1 && runs[0].id === runs[runs.length - 1].id) {
     const last = runs.pop();
-    runs[0].start = last.start; runs[0].wrap = true; runs[0].km = Math.min(runs[0].km, last.km);
+    runs[0].startI = last.startI; runs[0].count += last.count; runs[0].wrap = true; runs[0].km = Math.min(runs[0].km, last.km);
   }
+  for (const r of runs) { r.start = r.startI * STEP; r.end = r.endI * STEP; }
   runs.sort((a, b) => (a.wrap ? -1 : a.start) - (b.wrap ? -1 : b.start));
   runs.forEach((r, i) => { r.i = i; });
-  return { at, home, antipode, view, runs };
+  return { at, home, antipode, view, runs, step: STEP };
 }
 
 // ---------------------------------------------------------------- globe
@@ -544,6 +555,7 @@ function clearPick() {
   svg.replaceChildren();
   $('#legend').replaceChildren();
   hlRun = -1;
+  lastPick = null;
   const place = $('#place');
   place.replaceChildren();
   const hint = document.createElement('p'); hint.className = 'hint';
@@ -582,8 +594,9 @@ function drawLines(res) {
     const width = runWidth(run);
     const n = Math.max(1, Math.round(width / 4));
     for (let k = 0; k <= n; k++) {
-      const b = Math.round(run.start + (width - 1) * (k / n)) % 360;
-      const v = res.view[b];
+      const idx = Math.round(run.startI + (run.count - 1) * (k / n)) % res.view.length;
+      const b = idx * res.step;
+      const v = res.view[idx];
       if (!v) continue;
       const pts = [];
       const steps = Math.max(8, Math.round(v.km / 150));
@@ -615,7 +628,7 @@ function wedgePath(cx, cy, r0, r1, a0, a1) {
   return `M${x0.toFixed(2)} ${y0.toFixed(2)} A${r1} ${r1} 0 ${large} 1 ${x1.toFixed(2)} ${y1.toFixed(2)} L${x2.toFixed(2)} ${y2.toFixed(2)} A${r0} ${r0} 0 ${large} 0 ${x3.toFixed(2)} ${y3.toFixed(2)} Z`;
 }
 const fmtKm = (km) => `${Math.round(km).toLocaleString('en-GB')} km`;
-const bearingLabel = (run) => (run.start === run.end ? `${run.start}°` : `${run.start}°–${run.end}°`);
+const bearingLabel = (run) => (run.start === run.end ? fmtDeg(run.start) : `${fmtDeg(run.start)}–${fmtDeg(run.end)}`);
 
 // Hover linking: wedge <-> legend row <-> globe paths, all keyed by run index.
 let hlRun = -1;
@@ -635,7 +648,7 @@ function drawChart(res) {
   svg.replaceChildren();
   const cx = 180, cy = 180, r0 = 46, r1 = 160;
   for (const run of res.runs) {
-    const a0 = run.start - 0.5, a1 = (run.wrap ? run.end + 360 : run.end) + 0.5;
+    const a0 = run.start - res.step / 2, a1 = (run.wrap ? run.end + 360 : run.end) + res.step / 2;
     const path = el('path', { d: wedgePath(cx, cy, r0, r1, a0, a1), fill: palette[run.id], class: 'wedge', 'data-run': run.i });
     path.appendChild(el('title', {}, `${names[run.id]} · ${bearingLabel(run)} · nearest ${fmtKm(run.km)}`));
     path.addEventListener('pointerenter', () => highlightRun(run.i));
@@ -668,21 +681,22 @@ function drawLegend(res) {
     sm.textContent = (run.km > ANTIPODE_KM ? 'beyond the antipode · ' : '') + `nearest ${fmtKm(run.km)}`;
     name.appendChild(sm);
     const rg = document.createElement('span'); rg.className = 'ranges';
-    rg.textContent = `${bearingLabel(run)} · ${runWidth(run)}°`;
+    rg.textContent = `${bearingLabel(run)} · ${fmtDeg(runWidth(run))}`;
     li.append(sw, name, rg);
     li.addEventListener('pointerenter', () => highlightRun(run.i));
     li.addEventListener('pointerleave', () => highlightRun(-1));
     legend.appendChild(li);
   }
-  const blocked = res.view.filter((v) => !v).length;
+  const blocked = res.view.filter((v) => !v).length * res.step;
   const li = document.createElement('li');
   li.className = 'blocked';
   const sw = document.createElement('span'); sw.className = 'swatch'; sw.style.border = '1px dashed #4b5563';
-  const name = document.createElement('span'); name.textContent = `Land in view for the other ${blocked}° — blank on the chart`;
+  const name = document.createElement('span'); name.textContent = `Land in view for the other ${fmtDeg(blocked)} — blank on the chart`;
   li.append(sw, name, document.createElement('span'));
   legend.appendChild(li);
 }
 
+let lastPick = null;
 function pick(lat, lon) {
   const t0 = performance.now();
   const res = analyze(lat, lon);
@@ -696,11 +710,12 @@ function pick(lat, lon) {
   drawLines(res);
   drawChart(res);
   drawLegend(res);
-  const open = res.view.filter((v) => v).length;
+  const open = res.view.filter((v) => v).length * res.step;
+  lastPick = { lat, lon };
   const place = $('#place');
   place.replaceChildren();
   const nm = document.createElement('p'); nm.className = 'name';
-  nm.textContent = `${names[res.home]} — ${open}° of open water`;
+  nm.textContent = `${names[res.home]} — ${fmtDeg(open)} of open water`;
   const co = document.createElement('p'); co.className = 'coords';
   co.textContent = `${Math.abs(res.at.lat).toFixed(2)}°${res.at.lat >= 0 ? 'N' : 'S'}, ${Math.abs(res.at.lon).toFixed(2)}°${res.at.lon >= 0 ? 'E' : 'W'} · computed in ${Math.round(performance.now() - t0)} ms`;
   place.append(nm, co);
@@ -708,7 +723,7 @@ function pick(lat, lon) {
   $('#viewLink').title = 'Copy or share a link to this view';
   $('#viewLinkStatus').textContent = '';
   // The address bar always holds a link to exactly this view.
-  history.replaceState(null, '', `?at=${res.at.lat.toFixed(3)},${res.at.lon.toFixed(3)}`);
+  history.replaceState(null, '', `?at=${res.at.lat.toFixed(3)},${res.at.lon.toFixed(3)}${STEP !== 1 ? `&step=${STEP}` : ''}`);
   // On a stacked (phone) layout the results are below the globe — bring them into view.
   if (window.innerWidth < 860) document.querySelector('.panel').scrollIntoView({ behavior: 'smooth', block: 'start' });
   return res;
@@ -752,6 +767,14 @@ function pickFromUrl() {
 }
 
 $('#viewLink').addEventListener('click', shareView);
+
+const stepSel = $('#step');
+stepSel.value = String(STEP);
+stepSel.addEventListener('change', () => {
+  STEP = parseFloat(stepSel.value);
+  try { localStorage.setItem('nl-step', String(STEP)); } catch (e) { /* ignore */ }
+  if (lastPick) pick(lastPick.lat, lastPick.lon);
+});
 
 $('#jump').addEventListener('change', (e) => {
   const [lat, lon] = e.target.value.split(',').map(parseFloat);
