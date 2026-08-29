@@ -20,7 +20,7 @@
   <meta property="og:locale"      content="en_GB" />
   <meta name="twitter:card"        content="summary_large_image" />
   <meta name="twitter:title"       content="Nearest Land - what's across the water from any coastline" />
-  <meta name="twitter:description" content="Click a coastline on a 3D globe. Every direction over the sea is followed along a great circle to its first landfall." />
+  <meta name="twitter:description" content="Click a coastline on a 3D globe." />
   <meta name="twitter:image"       content="https://nearest.land/og-image.png" />
 
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
@@ -50,7 +50,7 @@
 
 <header class="top">
   <h1 class="brand">nearest<span class="brand-tld">.land</span></h1>
-  <p class="sub">Click a coastline to pick it · right-drag to turn the globe · scroll to zoom. On touch: tap, drag, pinch. Every direction over the sea is followed along a great circle to its first landfall.</p>
+  <p class="sub">Click a coastline to pick it · right-drag to turn the globe · scroll to zoom. On touch: tap, drag, pinch.</p>
   <span class="viewlink-wrap"><button type="button" class="viewlink" id="viewLink" disabled title="Pick a coastline first">Share this view</button><span class="viewlink-status" id="viewLinkStatus"></span></span>
 </header>
 
@@ -65,14 +65,27 @@
         <p id="loadmsg">Downloading the world&hellip;</p>
       </div>
     </div>
-    <div class="presets" id="presets" aria-label="Try a place">
-      <button type="button" data-lat="-31.95" data-lon="115.75">Perth</button>
-      <button type="button" data-lat="50.07" data-lon="-5.70">Land's End</button>
-      <button type="button" data-lat="-34.35" data-lon="18.47">Cape Point</button>
-      <button type="button" data-lat="38.70" data-lon="-9.42">Lisbon</button>
-      <button type="button" data-lat="35.30" data-lon="139.75">Tokyo Bay</button>
-      <button type="button" data-lat="40.57" data-lon="-73.95">New York</button>
-      <button type="button" data-lat="-41.29" data-lon="174.78">Wellington</button>
+    <div class="presets" id="presets">
+      <select id="jump" aria-label="Jump to a place">
+        <option value="">Jump to a place…</option>
+        <optgroup label="Records (computed from every coastline)">
+          <option value="10.854,-61.04">Most countries in view — Trinidad’s east coast sees 42</option>
+          <option value="25.532,66.313">Longest straight sea voyage — Pakistan coast → Kamchatka, 32,000 km</option>
+          <option value="-71.235,170.288">Widest sea view — Cape Adare, Antarctica, 329° of water</option>
+          <option value="-51.724,-57.876">Falkland Islands — 41 countries across the water</option>
+          <option value="65.435,-84.331">Furthest from any other country — Hudson Bay, Canada (Australia, 24,300 km)</option>
+        </optgroup>
+        <optgroup label="Classics">
+          <option value="50.07,-5.70">Land’s End, England → Brazil</option>
+          <option value="-31.95,115.75">Perth, Australia → Africa</option>
+          <option value="40.57,-73.95">New York, Rockaway Beach</option>
+          <option value="-34.35,18.47">Cape Point, South Africa</option>
+          <option value="38.70,-9.42">Lisbon, Portugal</option>
+          <option value="35.30,139.75">Tokyo Bay, Japan</option>
+          <option value="-41.29,174.78">Wellington, New Zealand</option>
+          <option value="-37.11,-12.28">Tristan da Cunha, South Atlantic</option>
+        </optgroup>
+      </select>
       <button type="button" class="locate" id="locate" title="Show where you are on the globe">My location</button>
     </div>
   </section>
