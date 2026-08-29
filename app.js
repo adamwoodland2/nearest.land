@@ -776,9 +776,20 @@ stepSel.addEventListener('change', () => {
   if (lastPick) pick(lastPick.lat, lastPick.lon);
 });
 
+function setStep(step) {
+  if (![1, 0.5, 0.25].includes(step) || step === STEP) return;
+  STEP = step;
+  stepSel.value = String(step);
+  try { localStorage.setItem('nl-step', String(step)); } catch (e) { /* ignore */ }
+}
+
+// Option values are "lat,lon" or "lat,lon,step": records carry the sampling step they were
+// computed with, so choosing one reproduces the record rather than re-running it at whatever
+// step happens to be selected.
 $('#jump').addEventListener('change', (e) => {
-  const [lat, lon] = e.target.value.split(',').map(parseFloat);
+  const [lat, lon, step] = e.target.value.split(',').map(parseFloat);
   if (Number.isNaN(lat) || Number.isNaN(lon)) return;
+  if (!Number.isNaN(step)) setStep(step);
   pick(lat, lon);
   flyTo(lat, lon);
 });
