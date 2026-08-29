@@ -4,7 +4,7 @@
 
 nearest.land answers "what's across the sea from here?" properly: not due east or west, but along great circles, which is why parts of the US east coast face Australia and Land's End faces Brazil. Pick a point on any coast (or use your device location) and you get a north-up polar chart of 1° wedges coloured by the country you would reach in that direction, blank where land is in view, plus a list clockwise from north with bearing ranges and the nearest distance to each country. The paths are drawn on the globe, and the antipode of the chosen point is marked and named.
 
-Method: Natural Earth 1:10m country polygons (public domain) are rasterised in the browser to a ~10 km grid; the chosen point is snapped to the water's edge; each bearing is walked along its great circle until the first land cell, continuing past the antipode if needed. Land within about 20 km counts as "land in view". Results are inherently approximate (see the coastline paradox: the finer a coast is measured, the longer it gets).
+Method: Natural Earth 1:10m country polygons (public domain) are rasterised in the browser to a ~10 km grid; the chosen point is snapped to the water's edge; each bearing is walked along its great circle until the first land cell, continuing past the antipode if needed. Land within about 20 km counts as "land in view". Bearings are sampled every 1°, so a distant island narrower than about 1/57 of its distance (90 km at 5,000 km) can fall between bearings. Results are inherently approximate (see the coastline paradox: the finer a coast is measured, the longer it gets).
 
 Technical: static site, three.js, MIT licensed, installable PWA that works offline once loaded. No tracking scripts, no backend.
 

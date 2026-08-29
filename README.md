@@ -37,6 +37,8 @@ All client-side, no backend:
 2. The clicked point snaps to the nearest water cell touching land.
 3. Each bearing is walked along its great circle (3 km steps near the shore, 8 km beyond) until
    the first land cell — a full circle if needed. Land within 20 km counts as "land in view".
+   Bearings are sampled at 1°, so a distant island narrower than ~1/57 of its distance can fall
+   between two bearings.
 4. The globe is [three.js](https://threejs.org/) (vendored in `lib/`): an 8192-wide texture where
    the GPU allows, coastlines and borders as line geometry, HTML labels projected per frame.
 
