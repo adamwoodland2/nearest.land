@@ -3,7 +3,7 @@
 	"lang": "en-GB",
 	"dir": "ltr",
 	"categories": ["education", "travel"],
-	"name": "Nearest Land — what's across the water",
+	"name": "Nearest Land - what's across the water",
 	"short_name": "Nearest Land",
 	"description": "Click any coastline on a 3D globe and see which country lies across the water in every direction, following great circles to the first landfall.",
 	"start_url": "/",

@@ -128,7 +128,34 @@ function cleanPolarRing(ring) {
 }
 
 // Colour per country for the globe texture and the chart: spread hues, muted.
-const palette = names.map((_, i) => (i === 0 ? '#9aa3b2' : `hsl(${Math.round((i * 137.508) % 360)}, 42%, 58%)`));
+// Colours: a graph colouring over land borders (topojson.neighbors = polygons sharing an
+// arc), so no two countries that touch get the same or a similar hue. 24 swatches: 12 hues in
+// two lightness/saturation variants; each country takes the swatch furthest in hue from every
+// neighbour already coloured (neighbours with the most borders are coloured first).
+const HUES = [0, 30, 55, 85, 120, 160, 190, 210, 240, 270, 300, 330];
+const SWATCHES = [];
+for (const h of HUES) SWATCHES.push({ h, css: `hsl(${h}, 46%, 58%)` });
+for (const h of HUES) SWATCHES.push({ h, css: `hsl(${(h + 15) % 360}, 34%, 46%)` });
+const palette = (() => {
+  const geoms = topo.objects.countries.geometries;
+  const nb = topojson.neighbors(geoms);              // index-aligned with `features`
+  const order = geoms.map((_, i) => i).sort((a, b) => nb[b].length - nb[a].length || a - b);
+  const pick = new Array(geoms.length).fill(-1);
+  const hueGap = (a, b) => { const d = Math.abs(a - b) % 360; return Math.min(d, 360 - d); };
+  for (const i of order) {
+    const used = nb[i].filter((j) => pick[j] >= 0).map((j) => SWATCHES[pick[j]]);
+    let best = -1, bestScore = -Infinity;
+    SWATCHES.forEach((sw, k) => {
+      // Score: distance in hue from the nearest neighbour's colour; a small deterministic
+      // spread (i * 7) breaks ties so unconnected countries don't all pick the same swatch.
+      const gap = used.length ? Math.min(...used.map((u) => hueGap(u.h, sw.h))) : 999;
+      const score = gap * 10 - ((k + i * 7) % SWATCHES.length) * 0.01 - used.some((u) => u.css === sw.css) * 1000;
+      if (score > bestScore) { bestScore = score; best = k; }
+    });
+    pick[i] = best;
+  }
+  return ['#9aa3b2', ...pick.map((k) => SWATCHES[k].css)];
+})();
 
 // Unwrap a ring so consecutive longitudes never jump by more than 180 degrees; a ring that
 // crosses the antimeridian then extends beyond [-180, 180] and is drawn at three horizontal
@@ -181,7 +208,20 @@ function drawFeature(ctx, f, sx = 1) {
         const x = ((lon + 180) / 360 * W + dx) * sx, y = (90 - lat) / 180 * H * sx;
         if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
       }
-      if (x1 - x0 < 4 * sx || y1 - y0 < 4 * sx) {   // small, or thin (atolls, barrier islands)
+      if (x1 - x0 < 3 * sx && y1 - y0 < 3 * sx) {
+        // Small (under ~30 km): one cell at the centroid, so it exists without being inflated
+        // into a blob of vertex cells (Kinmen was rendering as a cluster of squares).
+        let a = 0, cx = 0, cy = 0;
+        for (let i = 0, j = outer.length - 1; i < outer.length; j = i++) {
+          const [lx0, ly0] = outer[j], [lx1, ly1] = outer[i];
+          const cr = lx0 * ly1 - lx1 * ly0;
+          a += cr; cx += (lx0 + lx1) * cr; cy += (ly0 + ly1) * cr;
+        }
+        const [lon, lat] = Math.abs(a) > 1e-12 ? [cx / (3 * a), cy / (3 * a)] : outer[0];
+        const x = ((lon + 180) / 360 * W + dx) * sx, y = (90 - lat) / 180 * H * sx;
+        ctx.fillRect(Math.floor(x), Math.floor(y), sx, sx);
+      } else if (x1 - x0 < 4 * sx || y1 - y0 < 4 * sx) {
+        // Long but thin (atolls, barrier islands): stamp the vertex cells so it is not lost.
         for (const [lon, lat] of outer) {
           const x = ((lon + 180) / 360 * W + dx) * sx, y = (90 - lat) / 180 * H * sx;
           ctx.fillRect(Math.floor(x), Math.floor(y), sx, sx);
@@ -740,12 +780,12 @@ function clearPick() {
   const place = $('#place');
   place.replaceChildren();
   const hint = document.createElement('p'); hint.className = 'hint';
-  hint.textContent = 'Nothing picked. Click a coastline on the globe, or try one of the places under it.';
+  hint.textContent = 'Nothing picked. Click the globe - a coastline in Coast mode, any point on land or sea in Anywhere or Over land - or try one of the places under it.';
   place.appendChild(hint);
   history.replaceState(null, '', location.pathname);
   $('#jump').value = '';
   $('#viewLink').disabled = true;
-  $('#viewLink').title = 'Pick a coastline first';
+  $('#viewLink').title = 'Pick a point first';
   $('#viewLinkStatus').textContent = '';
 }
 canvas.addEventListener('pointermove', (e) => {
@@ -854,7 +894,7 @@ function drawLegend(res) {
   legend.replaceChildren();
   const unique = new Set(res.runs.map((r) => r.id)).size;
   $('#legendCount').textContent = res.runs.length
-    ? `— ${unique} ${unique === 1 ? 'country' : 'countries'}, ${res.runs.length} ${res.runs.length === 1 ? 'sector' : 'sectors'}`
+    ? `- ${unique} ${unique === 1 ? 'country' : 'countries'}, ${res.runs.length} ${res.runs.length === 1 ? 'sector' : 'sectors'}`
     : '';
   // One row per sector, clockwise from north — the same order as the chart.
   for (const run of res.runs) {
@@ -878,7 +918,7 @@ function drawLegend(res) {
   const li = document.createElement('li');
   li.className = 'blocked';
   const sw = document.createElement('span'); sw.className = 'swatch'; sw.style.border = '1px dashed #4b5563';
-  const name = document.createElement('span'); name.textContent = res.mode === 'land' ? `Sea in the way for the other ${fmtDeg(blocked)} — blank on the chart` : `Land in view for the other ${fmtDeg(blocked)} — blank on the chart`;
+  const name = document.createElement('span'); name.textContent = res.mode === 'land' ? `Sea in the way for the other ${fmtDeg(blocked)} - blank on the chart` : `Land in view for the other ${fmtDeg(blocked)} - blank on the chart`;
   li.append(sw, name, document.createElement('span'));
   legend.appendChild(li);
 }
@@ -903,10 +943,10 @@ function pick(lat, lon) {
   place.replaceChildren();
   const nm = document.createElement('p'); nm.className = 'name';
   nm.textContent = res.mode === 'any'
-    ? `${res.home ? names[res.home] : 'At sea'} — next country in every direction`
+    ? `${res.home ? names[res.home] : 'At sea'} - next country in every direction`
     : res.mode === 'land'
-      ? (res.home ? `${names[res.home]} — ${fmtDeg(open)} reaches another country over land` : 'At sea — nothing to reach over land')
-      : `${names[res.home]} — ${fmtDeg(open)} of open water`;
+      ? (res.home ? `${names[res.home]} - ${fmtDeg(open)} reaches another country over land` : 'At sea - nothing to reach over land')
+      : `${names[res.home]} - ${fmtDeg(open)} of open water`;
   const co = document.createElement('p'); co.className = 'coords';
   co.textContent = `${Math.abs(res.at.lat).toFixed(2)}°${res.at.lat >= 0 ? 'N' : 'S'}, ${Math.abs(res.at.lon).toFixed(2)}°${res.at.lon >= 0 ? 'E' : 'W'} · computed in ${Math.round(performance.now() - t0)} ms`;
   place.append(nm, co);
@@ -978,7 +1018,8 @@ $('#jump').addEventListener('change', (e) => {
   const parts = e.target.value.split(',');
   const [lat, lon] = parts.map(parseFloat);
   if (Number.isNaN(lat) || Number.isNaN(lon)) return;
-  if (parts.length > 2) setMode(MODES.includes(parts[2]) ? parts[2] : 'coast'); // records force their mode
+  // Records force the mode they were computed in; the Classics are coast views, so they force Coast.
+  setMode(MODES.includes(parts[2]) ? parts[2] : 'coast');
   pick(lat, lon);
   flyTo(lat, lon);
 });
@@ -1060,7 +1101,7 @@ async function openCompass() {
   compass.res = res;
   compass.heading = null; compass.rot = 0;
   compass.el.hidden = false;
-  compass.headingEl.textContent = '—';
+  compass.headingEl.textContent = '-';
   const shoreKm = res ? distKm(gpsPos, res.at) : Infinity;
   if (res && MODE !== 'coast') {
     compass.dial.classList.remove('noarrow');
@@ -1082,7 +1123,7 @@ async function openCompass() {
   if (iosCompass) {
     try {
       const state = await DeviceOrientationEvent.requestPermission();
-      if (state !== 'granted') { compass.noteEl.textContent = 'Compass permission was not granted — allow Motion & Orientation access and try again.'; return; }
+      if (state !== 'granted') { compass.noteEl.textContent = 'Compass permission was not granted - allow Motion & Orientation access and try again.'; return; }
     } catch (e) { compass.noteEl.textContent = 'Compass permission was not granted.'; return; }
     compass.eventName = 'deviceorientation';
   } else {
@@ -1092,7 +1133,7 @@ async function openCompass() {
   window.addEventListener(compass.eventName, compass.listener);
   clearTimeout(compass.timer);
   compass.timer = setTimeout(() => {
-    if (compass.heading === null) compass.noteEl.textContent = 'No compass reading yet — move the phone in a figure of eight to calibrate, and make sure location and motion access are allowed.';
+    if (compass.heading === null) compass.noteEl.textContent = 'No compass reading yet - move the phone in a figure of eight to calibrate, and make sure location and motion access are allowed.';
   }, 4000);
 }
 

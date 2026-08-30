@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Nearest Land - what's across the water from any coastline</title>
-  <meta name="description" content="Click any coastline on a 3D globe and see which country lies across the water in every direction — each compass bearing followed along a great circle to its first landfall. Free, runs in your browser." />
+  <meta name="description" content="Click any coastline on a 3D globe and see which country lies across the water in every direction - each compass bearing followed along a great circle to its first landfall. Free, runs in your browser." />
   <meta name="keywords" content="what's across the ocean, across the water, opposite coast, great circle, first landfall, beyond the sea map, what country is across the sea, interactive globe" />
   <link rel="canonical" href="https://nearest.land/" />
 
@@ -12,7 +12,7 @@
   <meta property="og:url"         content="https://nearest.land/" />
   <meta property="og:site_name"   content="nearest.land" />
   <meta property="og:title"       content="Nearest Land - what's across the water from any coastline" />
-  <meta property="og:description" content="Click a coastline on a 3D globe. Every direction over the sea is followed along a great circle to its first landfall — and the answers are not what you'd guess." />
+  <meta property="og:description" content="Click a coastline on a 3D globe. Every direction over the sea is followed along a great circle to its first landfall - and the answers are not what you'd guess." />
   <meta property="og:image"       content="https://nearest.land/og-image.png" />
   <meta property="og:image:width"  content="1200" />
   <meta property="og:image:height" content="630" />
@@ -50,8 +50,8 @@
 
 <header class="top">
   <h1 class="brand">nearest<span class="brand-tld">.land</span></h1>
-  <p class="sub">Click a coastline to pick it · right-drag to turn the globe · scroll to zoom. On touch: tap, drag, pinch.</p>
-  <span class="viewlink-wrap"><button type="button" class="viewlink" id="viewLink" disabled title="Pick a coastline first">Share this view</button><span class="viewlink-status" id="viewLinkStatus"></span></span>
+  <p class="sub">Click to pick a point - a coast in Coast mode, anywhere in the other modes · right-drag to turn · scroll to zoom · touch: tap, drag, pinch.</p>
+  <span class="viewlink-wrap"><button type="button" class="viewlink" id="viewLink" disabled title="Pick a point first">Share this view</button><span class="viewlink-status" id="viewLinkStatus"></span></span>
 </header>
 
 <main class="layout">
@@ -75,7 +75,7 @@
             <rect x="46" y="50" width="8" height="42" rx="3" fill="#ffc857"/>
           </svg>
         </div>
-        <p class="compass-heading" id="compassHeading">—</p>
+        <p class="compass-heading" id="compassHeading">-</p>
         <p class="compass-country" id="compassCountry">Point your phone at the sea</p>
         <p class="compass-note" id="compassNote"></p>
       </div>
@@ -91,15 +91,15 @@
       <select id="jump" aria-label="Jump to a place">
         <option value="">Jump to a place…</option>
         <optgroup label="Sea records (every coastline, Coast mode)">
-          <option value="21.753,-17.007,coast">Most countries in sea view — Dakhla peninsula, Western Sahara, sees 57</option>
-          <option value="24.741,67.104,coast">Longest straight sea voyage — Pakistan coast → Kamchatka, 32,042 km</option>
-          <option value="79.321,-17.622,coast">Widest sea view — north-east Greenland, 334.5° of water</option>
-          <option value="-71.235,170.288,coast">Cape Adare, Antarctica — 330° of water</option>
-          <option value="50.229,-64.995,coast">Furthest from any other country by sea — north shore of the Gulf of St Lawrence, Canada (Australia, 22,546 km)</option>
+          <option value="21.753,-17.007,coast">Most countries in sea view - Dakhla peninsula, Western Sahara, sees 55</option>
+          <option value="24.741,67.104,coast">Longest straight sea voyage - Pakistan coast → Kamchatka, 32,042 km</option>
+          <option value="78.179,11.997,coast">Widest sea view - Svalbard, Norway, 340.75° of water</option>
+          <option value="-71.235,170.288,coast">Cape Adare, Antarctica - 330° of water</option>
+          <option value="64.116,-77.739,coast">Furthest from any other country by sea - Hudson Strait, Canada (Australia, 24,018 km)</option>
         </optgroup>
         <optgroup label="Land records (every land cell)">
-          <option value="-7.3,-34.85,any">Most countries in line from land — Brazil’s coast near João Pessoa, 69 (land or sea)</option>
-          <option value="32.4,97.4,land">Most countries over land only — Yushu, Qinghai, China, 18 without crossing water</option>
+          <option value="-7.3,-34.85,any">Most countries in line from land - Brazil’s coast near João Pessoa, 70 (land or sea)</option>
+          <option value="32.4,97.4,land">Most countries over land only - Yushu, Qinghai, China, 18 without crossing water</option>
         </optgroup>
         <optgroup label="Classics">
           <option value="10.854,-61.04">Trinidad, east coast</option>
@@ -120,7 +120,7 @@
 
   <aside class="panel" aria-live="polite">
     <div class="place" id="place">
-      <p class="hint">Nothing picked yet. Click a coastline on the globe, or try one of the places under it.</p>
+      <p class="hint">Nothing picked yet. Click the globe - a coastline in Coast mode, any point on land or sea in Anywhere or Over land - or try one of the places under it.</p>
     </div>
     <div class="chart-wrap">
       <svg id="chart" viewBox="0 0 360 360" role="img" aria-label="360-degree view over the water"></svg>
@@ -135,10 +135,11 @@
       </label>
     </p>
     <ol class="legend" id="legend"></ol>
-    <p class="note"><strong>Three modes.</strong> <em>Coast</em> snaps your pick to the water's edge and follows each direction across the sea to its first landfall; land within about 20 km in a direction counts as "land in view" and is left blank. <em>Anywhere</em> starts from the exact point you tapped, on land or at sea, and follows each direction to the first land that is not the country you are standing in &mdash; so from Berlin, east is Poland at 80 km. <em>Over land</em> does the same but never crosses water: a direction that reaches the sea first is left blank.</p>
-    <p class="note"><strong>Not 100% accurate, by nature.</strong> The analysis grid is roughly 10 km, so very small islands and narrow straits can be missed, and the exact point you "stand" on is snapped to that grid. Directions are sampled every quarter of a degree, which spreads to about 22 km at 5,000 km and 65 km at 15,000 km &mdash; so a distant island narrower than that can slip between two bearings.</p>
-    <p class="note">There is also no such thing as <em>the</em> coastline. This is the <a href="https://en.wikipedia.org/wiki/Coastline_paradox" target="_blank" rel="noopener">coastline paradox</a>: the finer you measure a coast, the longer it gets, without limit &mdash; every bay contains smaller bays. So any answer depends on the map's level of detail. Here it is Natural Earth's 1:10m outlines (public domain), which is generous for a globe and coarse for a beach.</p>
+    <p class="note"><strong>Three modes.</strong> <em>Coast</em> snaps your pick to the water's edge and follows each direction across the sea to its first landfall; land within about 20 km in a direction counts as "land in view" and is left blank. <em>Anywhere</em> starts from the exact point you tapped, on land or at sea, and follows each direction to the first land that is not the country you are standing in - so from Berlin, east is Poland at 80 km. <em>Over land</em> does the same but never crosses water: a direction that reaches the sea first is left blank.</p>
+    <p class="note"><strong>Not 100% accurate, by nature.</strong> The analysis grid is roughly 10 km, and that cuts both ways. Islands smaller than a grid cell are kept deliberately as a single cell so they still count (Tristan da Cunha, Bermuda, the Maldives) - but that draws them as a square, and an island closer than about 10 km to a coast merges with it, so in Over land mode Kinmen reads as joined to mainland China and Taiwan appears reachable over land. In the other direction, straits and inlets narrower than about 10 km can vanish, and the exact point you "stand" on is snapped to the grid. Directions are sampled every quarter of a degree, which spreads to about 22 km at 5,000 km and 65 km at 15,000 km - so a distant island narrower than that can slip between two bearings.</p>
+    <p class="note">There is also no such thing as <em>the</em> coastline. This is the <a href="https://en.wikipedia.org/wiki/Coastline_paradox" target="_blank" rel="noopener">coastline paradox</a>: the finer you measure a coast, the longer it gets, without limit - every bay contains smaller bays. So any answer depends on the map's level of detail. Here it is Natural Earth's 1:10m outlines (public domain), which is generous for a globe and coarse for a beach.</p>
     <p class="note contact">Free, open source (MIT), nothing tracked. Questions or corrections: <a href="mailto:adam@nearest.land">adam@nearest.land</a></p>
+    <p class="note">Like this? Also see <a href="https://orrery.live/">orrery.live</a> for a 3D tour of the solar system.</p>
   </aside>
 </main>
 
