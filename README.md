@@ -20,9 +20,10 @@ Free, runs entirely in your browser, no account, no adverts.
 - Country names on the globe, decluttered by zoom; crisp vector coastlines at any zoom.
 - **Share this view** — every pick puts `?at=lat,lon` in the address bar; the Share button uses
   the native share sheet where available, otherwise copies the link.
-- **Two modes** — *Coast* (default) snaps to the water's edge and follows each direction across
+- **Three modes** — *Coast* (default) snaps to the water's edge and follows each direction across
   the sea; *Anywhere* starts from the exact point, on land or at sea, and follows each direction
-  to the first land that isn't the country you're in (from Berlin, east is Poland at 80 km).
+  to the first land that isn't the country you're in (from Berlin, east is Poland at 80 km);
+  *Over land* is the same but never crosses water.
 - **Show Me** (phones with a compass) — stand by the sea, tap it, and as you turn the phone the
   panel names the country across the water in the direction you face.
 
@@ -38,7 +39,8 @@ All client-side, no backend:
    4096×2048 equirectangular canvas in id-encoded colours, giving a country index at ~10 km
    cells. Canvas anti-aliasing is handled with a checksum channel; antimeridian-crossing
    polygons are unwrapped and drawn at three offsets; the polar cap south of 83.5°S is painted
-   as Antarctica because the dataset stops there.
+   as Antarctica because the dataset stops there. Islands smaller than a cell (Tristan da Cunha,
+   Bermuda, Easter Island, atolls) are stamped in directly so they are never lost.
 2. The clicked point snaps to the nearest water cell touching land.
 3. Each bearing is walked along its great circle (3 km steps near the shore, 8 km beyond) until
    the first land cell — a full circle if needed. Land within 20 km counts as "land in view".

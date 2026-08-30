@@ -44,7 +44,27 @@ await progress(2, 'Downloading the world (3.7 MB)…');
 const topo = await fetchWithProgress('data/countries-10m.json', 2, 45);
 await progress(46, 'Decoding countries…');
 const features = topojson.feature(topo, topo.objects.countries).features;
-const names = ['Open ocean', ...features.map((f) => f.properties.name)];
+// Natural Earth abbreviates the smaller names ("S. Geo. and the Is."); spell them out.
+const FULL_NAMES = {
+  'S. Sudan': 'South Sudan', 'W. Sahara': 'Western Sahara', 'Dem. Rep. Congo': 'Democratic Republic of the Congo',
+  'St-Martin': 'Saint Martin', 'Central African Rep.': 'Central African Republic', 'Dominican Rep.': 'Dominican Republic',
+  'Bosnia and Herz.': 'Bosnia and Herzegovina', 'Eq. Guinea': 'Equatorial Guinea', 'N. Cyprus': 'Northern Cyprus',
+  'Cyprus U.N. Buffer Zone': 'Cyprus UN Buffer Zone', 'Turks and Caicos Is.': 'Turks and Caicos Islands',
+  'St. Pierre and Miquelon': 'Saint Pierre and Miquelon', 'Pitcairn Is.': 'Pitcairn Islands', 'Fr. Polynesia': 'French Polynesia',
+  'Fr. S. Antarctic Lands': 'French Southern and Antarctic Lands', 'Marshall Is.': 'Marshall Islands',
+  'St. Vin. and Gren.': 'Saint Vincent and the Grenadines', 'U.S. Minor Outlying Is.': 'US Minor Outlying Islands',
+  'Antigua and Barb.': 'Antigua and Barbuda', 'St. Kitts and Nevis': 'Saint Kitts and Nevis', 'St-Barthélemy': 'Saint Barthélemy',
+  'U.S. Virgin Is.': 'US Virgin Islands', 'British Virgin Is.': 'British Virgin Islands', 'Cayman Is.': 'Cayman Islands',
+  'Heard I. and McDonald Is.': 'Heard Island and McDonald Islands', 'Faeroe Is.': 'Faroe Islands',
+  'Indian Ocean Ter.': 'Australian Indian Ocean Territories', 'Br. Indian Ocean Ter.': 'British Indian Ocean Territory',
+  'Cook Is.': 'Cook Islands', 'Wallis and Futuna Is.': 'Wallis and Futuna', 'Solomon Is.': 'Solomon Islands',
+  'S. Geo. and the Is.': 'South Georgia and the South Sandwich Islands', 'Falkland Is.': 'Falkland Islands',
+  'N. Mariana Is.': 'Northern Mariana Islands', 'Coral Sea Is.': 'Coral Sea Islands', 'Spratly Is.': 'Spratly Islands',
+  'Clipperton I.': 'Clipperton Island', 'Ashmore and Cartier Is.': 'Ashmore and Cartier Islands',
+  'Dem. Rep. Korea': 'North Korea',
+};
+const fullName = (f) => FULL_NAMES[f.properties.name] || f.properties.name;
+const names = ['Open ocean', ...features.map(fullName)];
 // Natural Earth's Antarctica polygon stops at about 85.2°S (no coastline data further south),
 // which would leave a hole at the pole. Everything south of that edge is painted as Antarctica.
 const ANT_ID = names.indexOf('Antarctica');
@@ -150,6 +170,21 @@ function drawFeature(ctx, f, sx = 1) {
       ctx.beginPath();
       for (const ring of poly.rings) projectRing(ctx, ring, dx, sx);
       ctx.fill('evenodd');
+      // Islands smaller than a cell (Tristan da Cunha, Bermuda, Easter Island, St Helena…) only
+      // produce anti-aliased edge pixels, which the checksum then throws away — so they vanished
+      // entirely. Stamp such polygons' vertex cells directly (integer fillRect = no anti-aliasing).
+      const outer = poly.rings[0];
+      let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+      for (const [lon, lat] of outer) {
+        const x = ((lon + 180) / 360 * W + dx) * sx, y = (90 - lat) / 180 * H * sx;
+        if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+      }
+      if (x1 - x0 < 4 * sx || y1 - y0 < 4 * sx) {   // small, or thin (atolls, barrier islands)
+        for (const [lon, lat] of outer) {
+          const x = ((lon + 180) / 360 * W + dx) * sx, y = (90 - lat) / 180 * H * sx;
+          ctx.fillRect(Math.floor(x), Math.floor(y), sx, sx);
+        }
+      }
     }
   }
 }
@@ -269,7 +304,7 @@ function destination(lat, lon, bearing, d) {
 
 // Walk one bearing to the first land cell, ignoring `skipId` (the home country in 'any' mode).
 // With `block`, land within BLOCK_KM returns null = "land in view".
-function march(lat, lon, bearing, skipId = 0, block = true) {
+function march(lat, lon, bearing, skipId = 0, block = true, landOnly = false) {
   const p1 = lat * DEG, l1 = lon * DEG, th = bearing * DEG;
   const sp1 = Math.sin(p1), cp1 = Math.cos(p1), sth = Math.sin(th), cth = Math.cos(th);
   for (let d = 3; d <= MAX_KM; d += d < 400 ? 3 : 8) {
@@ -278,7 +313,8 @@ function march(lat, lon, bearing, skipId = 0, block = true) {
     const p2 = Math.asin(sp2);
     const l2 = l1 + Math.atan2(sth * sd * cp1, cd - sp1 * sp2);
     const id = landAt(p2 / DEG, l2 / DEG);
-    if (!id || id === skipId) continue;
+    if (!id) { if (landOnly) return null; continue; }
+    if (id === skipId) continue;
     return block && d <= BLOCK_KM ? null : { id, km: d };
   }
   return { id: 0, km: MAX_KM }; // only possible for a country a great circle never leaves — none exist
@@ -331,14 +367,16 @@ if (![1, 0.5, 0.25].includes(STEP)) STEP = 1;
 // Mode: 'coast' snaps to the water's edge and walks to the first land (blank where land is in
 // view); 'any' starts from the exact point, on land or sea, and walks to the first land that is
 // not the country you are standing in.
+// 'land' is like 'any' but only walks over land: the sea blocks the bearing.
+const MODES = ['coast', 'any', 'land'];
 let MODE = 'coast';
-try { MODE = localStorage.getItem('nl-mode') === 'any' ? 'any' : 'coast'; } catch (e) { /* ignore */ }
-if (new URLSearchParams(location.search).get('mode') === 'any') MODE = 'any';
+try { const m = localStorage.getItem('nl-mode'); if (MODES.includes(m)) MODE = m; } catch (e) { /* ignore */ }
+{ const m = new URLSearchParams(location.search).get('mode'); if (MODES.includes(m)) MODE = m; }
 const runWidth = (run) => run.count * STEP;                       // degrees
 const fmtDeg = (d) => `${Number.isInteger(d) ? d : +d.toFixed(2)}°`;
 
 function analyze(lat, lon) {
-  let at, home, skip = 0, block = true;
+  let at, home, skip = 0, block = true, landOnly = false;
   if (MODE === 'coast') {
     const p = snapToShore(lat, lon);
     if (p === null) return null;
@@ -349,12 +387,13 @@ function analyze(lat, lon) {
     home = landAt(lat, lon);      // 0 at sea
     skip = home;
     block = false;
+    landOnly = MODE === 'land';
   }
   const antipode = { lat: -at.lat, lon: ((at.lon + 360) % 360) - 180 };
   antipode.id = landAt(antipode.lat, antipode.lon);
   const N = Math.round(360 / STEP);
   const view = new Array(N);
-  for (let i = 0; i < N; i++) view[i] = march(at.lat, at.lon, i * STEP, skip, block);
+  for (let i = 0; i < N; i++) view[i] = march(at.lat, at.lon, i * STEP, skip, block, landOnly);
   // Contiguous runs of the same destination. start/end are bearings in degrees; count is
   // the number of samples in the run.
   const runs = [];
@@ -478,10 +517,10 @@ const labelsBox = $('#labels');
 const labels = features.map((f, i) => {
   const d = document.createElement('div');
   d.className = 'label' + (labelInfo[i].area > 150 ? ' big' : '');
-  d.textContent = f.properties.name;
+  d.textContent = fullName(f);
   d.hidden = true;
   labelsBox.appendChild(d);
-  return { el: d, v: toVec(labelInfo[i].lat, labelInfo[i].lon, 1.0), area: labelInfo[i].area, w: f.properties.name.length * 6.4 + 10 };
+  return { el: d, v: toVec(labelInfo[i].lat, labelInfo[i].lon, 1.0), area: labelInfo[i].area, w: fullName(f).length * 6.4 + 10 };
 });
 const labelOrder = labels.map((l, i) => i).sort((a, b) => labels[b].area - labels[a].area);
 
@@ -564,6 +603,16 @@ canvas.addEventListener('pointerup', (e) => {
   pick(lat, lon);
 });
 
+// A Coast-mode pick with no shore within reach (mid-ocean, or a point in open sea): drop the
+// previous result instead of leaving it on screen under the wrong place name.
+function noCoast() {
+  clearPick();
+  const place = $('#place');
+  place.replaceChildren();
+  const hint = document.createElement('p'); hint.className = 'hint';
+  hint.textContent = 'No coastline within reach of that point. Pick closer to a shore, or switch the mode to Anywhere.';
+  place.appendChild(hint);
+}
 function clearPick() {
   if (!marker.visible) return;
   marker.visible = antiMarker.visible = false;
@@ -708,7 +757,7 @@ function drawLegend(res) {
   const li = document.createElement('li');
   li.className = 'blocked';
   const sw = document.createElement('span'); sw.className = 'swatch'; sw.style.border = '1px dashed #4b5563';
-  const name = document.createElement('span'); name.textContent = `Land in view for the other ${fmtDeg(blocked)} — blank on the chart`;
+  const name = document.createElement('span'); name.textContent = res.mode === 'land' ? `Sea in the way for the other ${fmtDeg(blocked)} — blank on the chart` : `Land in view for the other ${fmtDeg(blocked)} — blank on the chart`;
   li.append(sw, name, document.createElement('span'));
   legend.appendChild(li);
 }
@@ -717,7 +766,7 @@ let lastPick = null;
 function pick(lat, lon) {
   const t0 = performance.now();
   const res = analyze(lat, lon);
-  if (!res) return null;
+  if (!res) { noCoast(); return null; }
   marker.position.copy(toVec(res.at.lat, res.at.lon, 1.008));
   marker.visible = true;
   antiMarker.position.copy(toVec(res.antipode.lat, res.antipode.lon, 1.009));
@@ -734,7 +783,9 @@ function pick(lat, lon) {
   const nm = document.createElement('p'); nm.className = 'name';
   nm.textContent = res.mode === 'any'
     ? `${res.home ? names[res.home] : 'At sea'} — next country in every direction`
-    : `${names[res.home]} — ${fmtDeg(open)} of open water`;
+    : res.mode === 'land'
+      ? (res.home ? `${names[res.home]} — ${fmtDeg(open)} reaches another country over land` : 'At sea — nothing to reach over land')
+      : `${names[res.home]} — ${fmtDeg(open)} of open water`;
   const co = document.createElement('p'); co.className = 'coords';
   co.textContent = `${Math.abs(res.at.lat).toFixed(2)}°${res.at.lat >= 0 ? 'N' : 'S'}, ${Math.abs(res.at.lon).toFixed(2)}°${res.at.lon >= 0 ? 'E' : 'W'} · computed in ${Math.round(performance.now() - t0)} ms`;
   place.append(nm, co);
@@ -742,7 +793,7 @@ function pick(lat, lon) {
   $('#viewLink').title = 'Copy or share a link to this view';
   $('#viewLinkStatus').textContent = '';
   // The address bar always holds a link to exactly this view.
-  history.replaceState(null, '', `?at=${res.at.lat.toFixed(3)},${res.at.lon.toFixed(3)}${STEP !== 1 ? `&step=${STEP}` : ''}${MODE === 'any' ? '&mode=any' : ''}`);
+  history.replaceState(null, '', `?at=${res.at.lat.toFixed(3)},${res.at.lon.toFixed(3)}${STEP !== 1 ? `&step=${STEP}` : ''}${MODE !== 'coast' ? `&mode=${MODE}` : ''}`);
   // On a stacked (phone) layout the results are below the globe — bring them into view.
   if (window.innerWidth < 860) document.querySelector('.panel').scrollIntoView({ behavior: 'smooth', block: 'start' });
   return res;
@@ -777,7 +828,7 @@ function pickFromUrl() {
   const standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
   if (standalone) { if (location.search) history.replaceState(null, '', location.pathname); return false; }
   const q = new URLSearchParams(location.search);
-  if (q.get('mode') === 'any') setMode('any');
+  if (MODES.includes(q.get('mode'))) setMode(q.get('mode'));
   const m = /^(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)$/.exec(q.get('at') || '');
   if (!m) return false;
   const lat = parseFloat(m[1]), lon = parseFloat(m[2]);
@@ -810,7 +861,7 @@ function setStep(step) {
 const modeSel = $('#mode');
 modeSel.value = MODE;
 function setMode(mode) {
-  if (mode !== 'coast' && mode !== 'any') return;
+  if (!MODES.includes(mode)) return;
   MODE = mode;
   modeSel.value = mode;
   try { localStorage.setItem('nl-mode', mode); } catch (e) { /* ignore */ }
@@ -821,9 +872,11 @@ modeSel.addEventListener('change', () => {
 });
 
 $('#jump').addEventListener('change', (e) => {
-  const [lat, lon, step] = e.target.value.split(',').map(parseFloat);
+  const parts = e.target.value.split(',');
+  const [lat, lon, step] = parts.map(parseFloat);
   if (Number.isNaN(lat) || Number.isNaN(lon)) return;
-  if (!Number.isNaN(step)) { setStep(step); setMode('coast'); } // records are coast-mode results
+  // Records carry the step and mode they were computed with: "lat,lon,step,mode".
+  if (!Number.isNaN(step)) { setStep(step); setMode(MODES.includes(parts[3]) ? parts[3] : 'coast'); }
   pick(lat, lon);
   flyTo(lat, lon);
 });
@@ -859,7 +912,12 @@ function requestGps(fly) {
   if (!hasGeo) return;
   locateBtn.textContent = 'Locating…';
   navigator.geolocation.getCurrentPosition(
-    (pos) => { showGps(pos.coords.latitude, pos.coords.longitude); if (fly) flyTo(pos.coords.latitude, pos.coords.longitude); },
+    (pos) => {
+      showGps(pos.coords.latitude, pos.coords.longitude);
+      if (fly) flyTo(pos.coords.latitude, pos.coords.longitude);
+      // In Anywhere / Over-land mode the user's own position is a valid pick: pin it straight away.
+      if (fly && MODE !== 'coast') pick(pos.coords.latitude, pos.coords.longitude);
+    },
     () => { locateBtn.textContent = 'Location unavailable'; },
     { enableHighAccuracy: true, timeout: 12000, maximumAge: 120000 }
   );
@@ -902,17 +960,17 @@ async function openCompass() {
   compass.el.hidden = false;
   compass.headingEl.textContent = '—';
   const shoreKm = res ? distKm(gpsPos, res.at) : Infinity;
-  if (res && MODE === 'any') {
+  if (res && MODE !== 'coast') {
     compass.dial.classList.remove('noarrow');
     compass.countryEl.textContent = 'Turn to face any direction';
-    compass.noteEl.textContent = res.home ? `Standing in ${names[res.home]}. The next country on each bearing.` : 'At sea. The first land on each bearing.';
+    compass.noteEl.textContent = res.home ? `Standing in ${names[res.home]}. The next country on each bearing${MODE === 'land' ? ', over land only' : ''}.` : 'At sea. The first land on each bearing.';
   } else if (!res || shoreKm > 30) {
     compass.dial.classList.add('noarrow');
     compass.countryEl.textContent = 'You need to be near the water';
     compass.noteEl.textContent = res ? `The nearest shore is about ${Math.round(shoreKm)} km away. Get within sight of the sea and try again.` : 'No coastline found near you.';
     return;
   }
-  if (MODE !== 'any') {
+  if (MODE === 'coast') {
     compass.dial.classList.remove('noarrow');
     compass.countryEl.textContent = 'Point your phone at the sea';
     compass.noteEl.textContent = shoreKm > 15 ? `Using the ${names[res.home]} shore about ${Math.round(shoreKm)} km from you. Turn slowly.` : `Standing at the ${names[res.home]} shore. Turn slowly.`;
@@ -956,7 +1014,7 @@ function updateCompass() {
   compass.headingEl.textContent = `Facing ${Math.round(h)}°`;
   const idx = Math.round(h / res.step) % res.view.length;
   const v = res.view[idx];
-  if (!v) { compass.countryEl.textContent = 'Land that way'; compass.noteEl.textContent = 'Turn towards the water.'; return; }
+  if (!v) { compass.countryEl.textContent = res.mode === 'land' ? 'Sea that way' : 'Land that way'; compass.noteEl.textContent = res.mode === 'land' ? 'No other country over land on this bearing.' : 'Turn towards the water.'; return; }
   compass.countryEl.textContent = names[v.id];
   compass.noteEl.textContent = `${fmtKm(v.km)} ${res.mode === 'any' ? 'away on this bearing' : 'across the water on this bearing'}${v.km > ANTIPODE_KM ? ' (beyond the antipode)' : ''}.`;
 }
@@ -985,4 +1043,4 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
 }
 
 // Read-only test hook.
-window.__ATW = { setMode, analyze, pick, names, landAt, texW: TEX_W, cam: () => camera.position, borders: () => borders, globe, tex: () => texture.image, aniso: maxAniso, mipmaps: texture.generateMipmaps, compass: { open: openCompass, close: closeCompass, state: () => ({ heading: compass.heading, country: compass.countryEl.textContent, note: compass.noteEl.textContent, hidden: compass.el.hidden, noarrow: compass.dial.classList.contains('noarrow') }) }, capable: { hasGeo, directionCapable }, labels: () => labels.filter((l) => !l.el.hidden).map((l) => l.el.textContent), showGps, highlightRun };
+window.__ATW = { setMode, requestGps, analyze, pick, names, landAt, texW: TEX_W, cam: () => camera.position, borders: () => borders, globe, tex: () => texture.image, aniso: maxAniso, mipmaps: texture.generateMipmaps, compass: { open: openCompass, close: closeCompass, state: () => ({ heading: compass.heading, country: compass.countryEl.textContent, note: compass.noteEl.textContent, hidden: compass.el.hidden, noarrow: compass.dial.classList.contains('noarrow') }) }, capable: { hasGeo, directionCapable }, labels: () => labels.filter((l) => !l.el.hidden).map((l) => l.el.textContent), showGps, highlightRun };
