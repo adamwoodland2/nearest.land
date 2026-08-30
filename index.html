@@ -90,20 +90,20 @@
     <div class="presets" id="presets">
       <select id="jump" aria-label="Jump to a place">
         <option value="">Jump to a place…</option>
-        <optgroup label="Sea records (every coastline, Coast mode, 0.25° sampling)">
-          <option value="21.753,-17.007,0.25,coast">Most countries in sea view — Dakhla peninsula, Western Sahara, sees 57</option>
-          <option value="10.854,-61.04,0.25,coast">Trinidad’s east coast — 49 countries in sea view</option>
-          <option value="-51.724,-57.876,0.25,coast">Falkland Islands — 46 countries in sea view</option>
-          <option value="24.741,67.104,0.25,coast">Longest straight sea voyage — Pakistan coast → Kamchatka, 32,042 km</option>
-          <option value="79.321,-17.622,0.25,coast">Widest sea view — north-east Greenland, 334.5° of water</option>
-          <option value="-71.235,170.288,0.25,coast">Cape Adare, Antarctica — 330° of water</option>
-          <option value="50.229,-64.995,0.25,coast">Furthest from any other country by sea — north shore of the Gulf of St Lawrence, Canada (Australia, 22,546 km)</option>
+        <optgroup label="Sea records (every coastline, Coast mode)">
+          <option value="21.753,-17.007,coast">Most countries in sea view — Dakhla peninsula, Western Sahara, sees 57</option>
+          <option value="24.741,67.104,coast">Longest straight sea voyage — Pakistan coast → Kamchatka, 32,042 km</option>
+          <option value="79.321,-17.622,coast">Widest sea view — north-east Greenland, 334.5° of water</option>
+          <option value="-71.235,170.288,coast">Cape Adare, Antarctica — 330° of water</option>
+          <option value="50.229,-64.995,coast">Furthest from any other country by sea — north shore of the Gulf of St Lawrence, Canada (Australia, 22,546 km)</option>
         </optgroup>
-        <optgroup label="Land records (every land cell, 0.25° sampling)">
-          <option value="-7.3,-34.85,0.25,any">Most countries in line from land — Brazil’s coast near João Pessoa, 69 (land or sea)</option>
-          <option value="32.4,97.4,0.25,land">Most countries over land only — Yushu, Qinghai, China, 18 without crossing water</option>
+        <optgroup label="Land records (every land cell)">
+          <option value="-7.3,-34.85,any">Most countries in line from land — Brazil’s coast near João Pessoa, 69 (land or sea)</option>
+          <option value="32.4,97.4,land">Most countries over land only — Yushu, Qinghai, China, 18 without crossing water</option>
         </optgroup>
         <optgroup label="Classics">
+          <option value="10.854,-61.04">Trinidad, east coast</option>
+          <option value="-51.724,-57.876">Falkland Islands</option>
           <option value="50.07,-5.70">Land’s End, England → Brazil</option>
           <option value="-31.95,115.75">Perth, Australia → Africa</option>
           <option value="40.57,-73.95">New York, Rockaway Beach</option>
@@ -125,7 +125,7 @@
     <div class="chart-wrap">
       <svg id="chart" viewBox="0 0 360 360" role="img" aria-label="360-degree view over the water"></svg>
     </div>
-    <p class="legend-head">Clockwise from north
+    <p class="legend-head">Clockwise from north <span id="legendCount" class="legend-count"></span>
       <label class="step-ctl">Mode
         <select id="mode" aria-label="Pick mode">
           <option value="coast">Coast</option>
@@ -133,17 +133,10 @@
           <option value="land">Over land</option>
         </select>
       </label>
-      <label class="step-ctl">Sampling
-        <select id="step" aria-label="Bearing sampling step">
-          <option value="1">1°</option>
-          <option value="0.5">0.5°</option>
-          <option value="0.25">0.25°</option>
-        </select>
-      </label>
     </p>
     <ol class="legend" id="legend"></ol>
     <p class="note"><strong>Three modes.</strong> <em>Coast</em> snaps your pick to the water's edge and follows each direction across the sea to its first landfall; land within about 20 km in a direction counts as "land in view" and is left blank. <em>Anywhere</em> starts from the exact point you tapped, on land or at sea, and follows each direction to the first land that is not the country you are standing in &mdash; so from Berlin, east is Poland at 80 km. <em>Over land</em> does the same but never crosses water: a direction that reaches the sea first is left blank.</p>
-    <p class="note"><strong>Not 100% accurate, by nature.</strong> The analysis grid is roughly 10 km, so very small islands and narrow straits can be missed, and the exact point you "stand" on is snapped to that grid. Directions are sampled every 1° by default, and one degree of bearing spreads to about 90 km at 5,000 km and 260 km at 15,000 km &mdash; so a distant island narrower than that can slip between two bearings. The sampling control above the list tightens that to 0.5° or 0.25° for a little more compute.</p>
+    <p class="note"><strong>Not 100% accurate, by nature.</strong> The analysis grid is roughly 10 km, so very small islands and narrow straits can be missed, and the exact point you "stand" on is snapped to that grid. Directions are sampled every quarter of a degree, which spreads to about 22 km at 5,000 km and 65 km at 15,000 km &mdash; so a distant island narrower than that can slip between two bearings.</p>
     <p class="note">There is also no such thing as <em>the</em> coastline. This is the <a href="https://en.wikipedia.org/wiki/Coastline_paradox" target="_blank" rel="noopener">coastline paradox</a>: the finer you measure a coast, the longer it gets, without limit &mdash; every bay contains smaller bays. So any answer depends on the map's level of detail. Here it is Natural Earth's 1:10m outlines (public domain), which is generous for a globe and coarse for a beach.</p>
     <p class="note contact">Free, open source (MIT), nothing tracked. Questions or corrections: <a href="mailto:adam@nearest.land">adam@nearest.land</a></p>
   </aside>

@@ -82,12 +82,15 @@ function rasterPolar(ring, scale) {
   const pts = ring.map(([lon, lat]) => [(lon + 180) / 360 * width, (90 - lat) / 180 * height]);
   let yMin = Infinity, yMax = -Infinity;
   for (const [, y] of pts) { if (y < yMin) yMin = y; if (y > yMax) yMax = y; }
-  const y0 = Math.max(0, Math.floor(yMin)), y1 = Math.min(height - 1, Math.ceil(yMax));
+  // Cover every row down to the pole: the ring closes just above it, and the last row or two
+  // were coming out as "water", which made the South Pole itself an open-ocean cell.
+  const y0 = Math.max(0, Math.floor(yMin)), y1 = height - 1;
   const rows = y1 - y0 + 1;
   const mask = new Uint8Array(rows * width);
   const xs = [];
   for (let row = 0; row < rows; row++) {
     const yc = y0 + row + 0.5;
+    if (yc > yMax) { mask.fill(1, row * width, (row + 1) * width); continue; }
     xs.length = 0;
     for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
       const [xa, ya] = pts[j], [xb, yb] = pts[i];
@@ -329,18 +332,23 @@ function snapToShore(lat, lon) {
     return index[y * W + ((xw + 1) % W)] || index[y * W + ((xw - 1 + W) % W)] ||
       (y > 0 && index[(y - 1) * W + xw]) || (y < H - 1 && index[(y + 1) * W + xw]);
   };
-  for (let r = 0; r < 120; r++) {
-    let best = null, bestD = Infinity;
-    for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
-      if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
-      if (isShore(x0 + dx, y0 + dy)) {
-        const d = dx * dx + dy * dy;
-        if (d < bestD) { bestD = d; best = [x0 + dx, y0 + dy]; }
-      }
+  // Search up to 120 rows (~1,300 km) either way; the longitude span of each row is widened
+  // by 1/cos(lat) so the reach is the same distance at every latitude (a full row at the poles).
+  const R = 120;
+  let best = null, bestD = Infinity;
+  for (let dy = -R; dy <= R; dy++) {
+    const y = y0 + dy;
+    if (y < 0 || y >= H) continue;
+    const rowLat = (90 - (y + 0.5) / H * 180) * DEG;
+    const hx = Math.min(W >> 1, Math.ceil(R / Math.max(Math.cos(rowLat), 1e-3)));
+    for (let dx = -hx; dx <= hx; dx++) {
+      if (!isShore(x0 + dx, y)) continue;
+      const c = cellCentre(y * W + ((x0 + dx + W) % W));
+      const d = distKm({ lat, lon }, c);
+      if (d < bestD) { bestD = d; best = y * W + ((x0 + dx + W) % W); }
     }
-    if (best) return best[1] * W + ((best[0] + W) % W);
   }
-  return null;
+  return best;
 }
 function homeCountry(p) {
   const x = p % W, y = Math.floor(p / W), counts = new Map();
@@ -358,11 +366,9 @@ function homeCountry(p) {
 
 // Bearing sampling step in degrees (1, 0.5 or 0.25). Finer steps catch narrower distant
 // targets at proportionally more compute.
-let STEP = 1;
-try { STEP = parseFloat(localStorage.getItem('nl-step')) || 1; } catch (e) { /* ignore */ }
-const stepFromUrl = parseFloat(new URLSearchParams(location.search).get('step') || '');
-if ([1, 0.5, 0.25].includes(stepFromUrl)) STEP = stepFromUrl;
-if (![1, 0.5, 0.25].includes(STEP)) STEP = 1;
+// Bearing sampling. Fixed at 0.25° (1,440 bearings): a pick still takes ~40 ms on a phone, so the
+// coarser 1°/0.5° options that used to be offered were dropped (2026-08-31).
+const STEP = 0.25;
 // Mode: 'coast' snaps to the water's edge and walks to the first land (blank where land is in
 // view); 'any' starts from the exact point, on land or sea, and walks to the first land that is
 // not the country you are standing in.
@@ -382,6 +388,7 @@ function analyze(lat, lon) {
     at = cellCentre(p);
     home = homeCountry(p);
   } else {
+    lat = Math.max(-89.9, Math.min(89.9, lat)); // at the pole itself every bearing is "south"
     at = { lat, lon };
     home = landAt(lat, lon);      // 0 at sea
     skip = home;
@@ -727,6 +734,7 @@ function clearPick() {
   linesGroup.clear();
   svg.replaceChildren();
   $('#legend').replaceChildren();
+  $('#legendCount').textContent = '';
   hlRun = -1;
   lastPick = null;
   const place = $('#place');
@@ -844,6 +852,10 @@ function drawChart(res) {
 function drawLegend(res) {
   const legend = $('#legend');
   legend.replaceChildren();
+  const unique = new Set(res.runs.map((r) => r.id)).size;
+  $('#legendCount').textContent = res.runs.length
+    ? `— ${unique} ${unique === 1 ? 'country' : 'countries'}, ${res.runs.length} ${res.runs.length === 1 ? 'sector' : 'sectors'}`
+    : '';
   // One row per sector, clockwise from north — the same order as the chart.
   for (const run of res.runs) {
     const li = document.createElement('li');
@@ -902,7 +914,7 @@ function pick(lat, lon) {
   $('#viewLink').title = 'Copy or share a link to this view';
   $('#viewLinkStatus').textContent = '';
   // The address bar always holds a link to exactly this view.
-  history.replaceState(null, '', `?at=${res.at.lat.toFixed(3)},${res.at.lon.toFixed(3)}${STEP !== 1 ? `&step=${STEP}` : ''}${MODE !== 'coast' ? `&mode=${MODE}` : ''}`);
+  history.replaceState(null, '', `?at=${res.at.lat.toFixed(3)},${res.at.lon.toFixed(3)}${MODE !== 'coast' ? `&mode=${MODE}` : ''}`);
   // On a stacked (phone) layout the results are below the globe — bring them into view.
   if (window.innerWidth < 860) document.querySelector('.panel').scrollIntoView({ behavior: 'smooth', block: 'start' });
   return res;
@@ -948,24 +960,7 @@ function pickFromUrl() {
 
 $('#viewLink').addEventListener('click', shareView);
 
-const stepSel = $('#step');
-stepSel.value = String(STEP);
-stepSel.addEventListener('change', () => {
-  STEP = parseFloat(stepSel.value);
-  try { localStorage.setItem('nl-step', String(STEP)); } catch (e) { /* ignore */ }
-  if (lastPick) pick(lastPick.lat, lastPick.lon);
-});
-
-function setStep(step) {
-  if (![1, 0.5, 0.25].includes(step) || step === STEP) return;
-  STEP = step;
-  stepSel.value = String(step);
-  try { localStorage.setItem('nl-step', String(step)); } catch (e) { /* ignore */ }
-}
-
-// Option values are "lat,lon" or "lat,lon,step": records carry the sampling step they were
-// computed with, so choosing one reproduces the record rather than re-running it at whatever
-// step happens to be selected.
+// Option values are "lat,lon" or "lat,lon,mode": records carry the mode they were computed in.
 const modeSel = $('#mode');
 modeSel.value = MODE;
 function setMode(mode) {
@@ -981,10 +976,9 @@ modeSel.addEventListener('change', () => {
 
 $('#jump').addEventListener('change', (e) => {
   const parts = e.target.value.split(',');
-  const [lat, lon, step] = parts.map(parseFloat);
+  const [lat, lon] = parts.map(parseFloat);
   if (Number.isNaN(lat) || Number.isNaN(lon)) return;
-  // Records carry the step and mode they were computed with: "lat,lon,step,mode".
-  if (!Number.isNaN(step)) { setStep(step); setMode(MODES.includes(parts[3]) ? parts[3] : 'coast'); }
+  if (parts.length > 2) setMode(MODES.includes(parts[2]) ? parts[2] : 'coast'); // records force their mode
   pick(lat, lon);
   flyTo(lat, lon);
 });
@@ -1153,4 +1147,4 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
 }
 
 // Read-only test hook.
-window.__ATW = { controls, setMode, requestGps, analyze, pick, names, landAt, texW: TEX_W, cam: () => camera.position, borders: () => borders, globe, tex: () => texture.image, aniso: maxAniso, mipmaps: texture.generateMipmaps, compass: { open: openCompass, close: closeCompass, state: () => ({ heading: compass.heading, country: compass.countryEl.textContent, note: compass.noteEl.textContent, hidden: compass.el.hidden, noarrow: compass.dial.classList.contains('noarrow') }) }, capable: { hasGeo, directionCapable }, labels: () => labels.filter((l) => !l.el.hidden).map((l) => l.el.textContent), showGps, highlightRun };
+window.__ATW = { controls, snapToShore, cellCentre, setMode, requestGps, analyze, pick, names, landAt, texW: TEX_W, cam: () => camera.position, borders: () => borders, globe, tex: () => texture.image, aniso: maxAniso, mipmaps: texture.generateMipmaps, compass: { open: openCompass, close: closeCompass, state: () => ({ heading: compass.heading, country: compass.countryEl.textContent, note: compass.noteEl.textContent, hidden: compass.el.hidden, noarrow: compass.dial.classList.contains('noarrow') }) }, capable: { hasGeo, directionCapable }, labels: () => labels.filter((l) => !l.el.hidden).map((l) => l.el.textContent), showGps, highlightRun };
