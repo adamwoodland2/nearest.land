@@ -4,7 +4,7 @@
 //    dataset and three.js are precached so the whole globe works offline once loaded.
 //  - Images: CACHE-FIRST.
 //  - Bump CACHE on deploys that change any precached file.
-const CACHE = 'nl-v21';
+const CACHE = 'nl-v22';
 const CORE = [
 	'/',
 	'/index.html',
@@ -12,7 +12,6 @@ const CORE = [
 	'/app.js',
 	'/lib/three.module.js',
 	'/lib/three.core.js',
-	'/lib/jsm/controls/OrbitControls.js',
 	'/lib/topojson-client.min.js',
 	'/data/countries-10m.json',
 	'/favicon.svg',

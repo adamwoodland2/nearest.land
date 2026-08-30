@@ -3,7 +3,6 @@
 // equirectangular index map once, then each of 360 bearings is walked along its
 // great circle until the first land cell.
 import * as THREE from './lib/three.module.js';
-import { OrbitControls } from './lib/jsm/controls/OrbitControls.js';
 
 const W = 4096, H = 2048;         // index raster (about 9.8 km per cell at the equator)
 const R_EARTH = 6371;             // km
@@ -61,7 +60,7 @@ const FULL_NAMES = {
   'S. Geo. and the Is.': 'South Georgia and the South Sandwich Islands', 'Falkland Is.': 'Falkland Islands',
   'N. Mariana Is.': 'Northern Mariana Islands', 'Coral Sea Is.': 'Coral Sea Islands', 'Spratly Is.': 'Spratly Islands',
   'Clipperton I.': 'Clipperton Island', 'Ashmore and Cartier Is.': 'Ashmore and Cartier Islands',
-  'Dem. Rep. Korea': 'North Korea',
+  'Dem. Rep. Korea': 'North Korea', 'eSwatini': 'Eswatini',
 };
 const fullName = (f) => FULL_NAMES[f.properties.name] || f.properties.name;
 const names = ['Open ocean', ...features.map(fullName)];
@@ -425,13 +424,122 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x0a0f1a);
 const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 100);
 camera.position.set(2.9, 0, 0); // facing 0°N 0°E (toVec(0, 0) is the +x axis)
-const controls = new OrbitControls(camera, canvas);
-controls.enableDamping = true; controls.dampingFactor = 0.08;
-controls.minDistance = 1.15; controls.maxDistance = 6; controls.enablePan = false;
-controls.rotateSpeed = 0.6;
-// Mouse: left = pick, right-drag = rotate, wheel/middle = zoom. Touch keeps the defaults
-// (one finger rotates, two fingers pinch-zoom); a tap without movement picks.
-controls.mouseButtons = { LEFT: null, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
+// Free "trackball" rotation instead of OrbitControls: OrbitControls keeps the camera's up
+// vector fixed and clamps at the poles, so you could never roll the globe over the top to
+// follow a path across the Arctic. Here a drag rotates the camera (and its up vector) about
+// screen axes, so every direction is the same and the poles are ordinary places.
+// Mouse: left = pick, right-drag = rotate, wheel/middle-drag = zoom. Touch: one finger
+// rotates, two fingers pinch-zoom; a tap without movement picks.
+class Trackball {
+  constructor(cam, dom) {
+    this.camera = cam; this.dom = dom;
+    this.minDistance = 1.15; this.maxDistance = 6; this.rotateSpeed = 0.6; this.damping = 0.85;
+    this.vel = [0, 0]; this.dragging = false; this.pointers = new Map(); this.pinch = 0;
+    dom.style.touchAction = 'none';
+    dom.addEventListener('contextmenu', (e) => e.preventDefault());
+    dom.addEventListener('pointerdown', (e) => {
+      this.pointers.set(e.pointerId, [e.clientX, e.clientY]);
+      const rotates = e.pointerType === 'touch' ? this.pointers.size === 1 : e.button === 2;
+      if (rotates) { this.dragging = true; this.vel = [0, 0]; }
+      if (e.pointerType !== 'touch' && e.button === 1) this.dolly = true;
+      if (this.pointers.size === 2) { this.dragging = false; this.pinch = this.span(); }
+      dom.setPointerCapture(e.pointerId);
+    });
+    dom.addEventListener('pointermove', (e) => {
+      const prev = this.pointers.get(e.pointerId);
+      if (!prev) return;
+      const dx = e.clientX - prev[0], dy = e.clientY - prev[1];
+      this.pointers.set(e.pointerId, [e.clientX, e.clientY]);
+      if (this.pointers.size === 2) {
+        const s = this.span();
+        if (this.pinch) this.zoom(this.pinch / s);
+        this.pinch = s;
+      } else if (this.dragging) {
+        this.rotate(dx, dy); this.vel = [dx, dy];
+      } else if (this.dolly) {
+        this.zoom(Math.pow(1.01, dy));
+      }
+    });
+    const end = (e) => {
+      this.pointers.delete(e.pointerId);
+      if (this.pointers.size < 2) this.pinch = 0;
+      if (this.pointers.size === 0) { this.dragging = false; this.dolly = false; }
+    };
+    dom.addEventListener('pointerup', end); dom.addEventListener('pointercancel', end);
+    dom.addEventListener('wheel', (e) => { e.preventDefault(); this.zoom(Math.pow(1.001, e.deltaY)); }, { passive: false });
+  }
+  span() { const p = [...this.pointers.values()]; return Math.hypot(p[0][0] - p[1][0], p[0][1] - p[1][1]) || 1; }
+  zoom(f) {
+    const d = Math.min(this.maxDistance, Math.max(this.minDistance, this.camera.position.length() * f));
+    this.camera.position.setLength(d);
+  }
+  // dx, dy in pixels: rotate about the screen's vertical and horizontal axes.
+  rotate(dx, dy) {
+    const cam = this.camera, k = 2 * Math.PI * this.rotateSpeed / this.dom.clientHeight;
+    // Screen-right for a camera at `position` looking at the origin is up × position.
+    const right = new THREE.Vector3().crossVectors(cam.up, cam.position).normalize();
+    // Drag right: the globe follows the pointer, so the camera swings left (about up).
+    // Drag down: the globe rolls down, so the camera swings up over the top (about right).
+    // Away from the poles a horizontal drag spins about the Earth's axis (so latitude holds
+    // and north stays up, like an orbit); close to a pole it blends into a free spin about
+    // the screen's vertical so the globe can roll straight over the top.
+    const w = this.polarWeight();
+    const axisY = new THREE.Vector3(0, cam.up.y >= 0 ? 1 : -1, 0);
+    const yaw = axisY.lerp(cam.up, w).normalize();
+    const q = new THREE.Quaternion().setFromAxisAngle(yaw, -dx * k)
+      .multiply(new THREE.Quaternion().setFromAxisAngle(right, -dy * k));
+    cam.position.applyQuaternion(q);
+    cam.up.applyQuaternion(q);
+    this.orthonormalise();
+  }
+  // 0 below 75° latitude, 1 above 88°: how much of the free-trackball behaviour applies.
+  polarWeight() {
+    const n = this.camera.position.clone().normalize();
+    const lat = Math.abs(Math.asin(Math.max(-1, Math.min(1, n.y)))) / DEG;
+    return Math.max(0, Math.min(1, (lat - 75) / 13));
+  }
+  // Bring north back to the top of the screen. Only runs between interactions (levelling
+  // during a drag would keep steering "up" towards the pole, so you could never cross it),
+  // and only away from the poles, easing the roll out over a few frames.
+  level(rate) {
+    const cam = this.camera;
+    if (this.polarWeight() >= 1) return;
+    const n = cam.position.clone().normalize();
+    const north = new THREE.Vector3(0, 1, 0).addScaledVector(n, -n.y);
+    if (north.lengthSq() < 1e-8) return;
+    north.normalize();
+    let roll = Math.atan2(new THREE.Vector3().crossVectors(north, cam.up).dot(n), north.dot(cam.up));
+    if (Math.abs(roll) < 1e-4) return;
+    if (Math.abs(roll) > Math.PI - 0.01) roll = Math.PI - 0.01; // exactly upside down: pick a way round
+    cam.up.copy(north).applyAxisAngle(n, roll * (1 - rate));
+    cam.lookAt(0, 0, 0);
+  }
+  orthonormalise() {
+    const cam = this.camera, n = cam.position.clone().normalize();
+    cam.up.addScaledVector(n, -cam.up.dot(n)).normalize();
+    cam.lookAt(0, 0, 0);
+  }
+  // Point the camera at a place; keep north roughly up on screen.
+  lookFrom(v) {
+    const cam = this.camera;
+    cam.position.copy(v);
+    const n = v.clone().normalize();
+    cam.up.set(0, 1, 0).addScaledVector(n, -n.y);
+    if (cam.up.lengthSq() < 1e-6) cam.up.set(1, 0, 0).addScaledVector(n, -n.x);
+    this.orthonormalise();
+  }
+  update() {
+    if (this.dragging) return;
+    if (Math.abs(this.vel[0]) >= 0.05 || Math.abs(this.vel[1]) >= 0.05) {
+      this.vel[0] *= this.damping; this.vel[1] *= this.damping;
+      this.rotate(this.vel[0], this.vel[1]);
+      return; // let the glide finish on its own path before levelling
+    }
+    this.level(0.12);
+  }
+}
+const controls = new Trackball(camera, canvas);
+controls.lookFrom(camera.position.clone());
 
 // Display texture: 8192 wide where the GPU and memory allow (about 130 MB), else 4096.
 const lowMem = (navigator.deviceMemory && navigator.deviceMemory < 4) || /Mobi|Android/i.test(navigator.userAgent);
@@ -711,6 +819,7 @@ function highlightRun(i, scroll = false) {
 
 function drawChart(res) {
   svg.replaceChildren();
+  svg.setAttribute('viewBox', '-14 -14 388 388'); // margin so the N/E/S/W letters are not clipped
   const cx = 180, cy = 180, r0 = 46, r1 = 160;
   for (const run of res.runs) {
     const a0 = run.start - res.step / 2, a1 = (run.wrap ? run.end + 360 : run.end) + res.step / 2;
@@ -800,8 +909,7 @@ function pick(lat, lon) {
 }
 
 function flyTo(lat, lon) {
-  camera.position.copy(toVec(lat, lon, camera.position.length()));
-  controls.update();
+  controls.lookFrom(toVec(lat, lon, camera.position.length()));
 }
 
 async function shareView() {
@@ -956,7 +1064,7 @@ const compass = {
 async function openCompass() {
   const res = analyze(gpsPos.lat, gpsPos.lon);
   compass.res = res;
-  compass.heading = null;
+  compass.heading = null; compass.rot = 0;
   compass.el.hidden = false;
   compass.headingEl.textContent = '—';
   const shoreKm = res ? distKm(gpsPos, res.at) : Infinity;
@@ -1003,14 +1111,16 @@ function onOrientation(e) {
   const angle = (screen.orientation && typeof screen.orientation.angle === 'number') ? screen.orientation.angle : (window.orientation || 0);
   h = (h + angle + 360) % 360;
   // Light smoothing across the 0/360 wrap.
-  if (compass.heading === null) compass.heading = h;
-  else { let d = ((h - compass.heading + 540) % 360) - 180; compass.heading = (compass.heading + d * 0.35 + 360) % 360; }
+  // Smooth, and keep `rot` unwrapped: the ring is rotated by `rot`, so crossing north never
+  // animates a full turn the other way (which made the letters appear twice).
+  if (compass.heading === null) { compass.heading = h; compass.rot = -h; }
+  else { const d = ((h - compass.heading + 540) % 360) - 180; compass.heading = (compass.heading + d * 0.35 + 360) % 360; compass.rot -= d * 0.35; }
   updateCompass();
 }
 
 function updateCompass() {
   const h = compass.heading, res = compass.res;
-  compass.ring.style.transform = `rotate(${-h}deg)`;
+  compass.ring.style.transform = `rotate(${compass.rot}deg)`;
   compass.headingEl.textContent = `Facing ${Math.round(h)}°`;
   const idx = Math.round(h / res.step) % res.view.length;
   const v = res.view[idx];
@@ -1043,4 +1153,4 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
 }
 
 // Read-only test hook.
-window.__ATW = { setMode, requestGps, analyze, pick, names, landAt, texW: TEX_W, cam: () => camera.position, borders: () => borders, globe, tex: () => texture.image, aniso: maxAniso, mipmaps: texture.generateMipmaps, compass: { open: openCompass, close: closeCompass, state: () => ({ heading: compass.heading, country: compass.countryEl.textContent, note: compass.noteEl.textContent, hidden: compass.el.hidden, noarrow: compass.dial.classList.contains('noarrow') }) }, capable: { hasGeo, directionCapable }, labels: () => labels.filter((l) => !l.el.hidden).map((l) => l.el.textContent), showGps, highlightRun };
+window.__ATW = { controls, setMode, requestGps, analyze, pick, names, landAt, texW: TEX_W, cam: () => camera.position, borders: () => borders, globe, tex: () => texture.image, aniso: maxAniso, mipmaps: texture.generateMipmaps, compass: { open: openCompass, close: closeCompass, state: () => ({ heading: compass.heading, country: compass.countryEl.textContent, note: compass.noteEl.textContent, hidden: compass.el.hidden, noarrow: compass.dial.classList.contains('noarrow') }) }, capable: { hasGeo, directionCapable }, labels: () => labels.filter((l) => !l.el.hidden).map((l) => l.el.textContent), showGps, highlightRun };
