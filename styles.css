@@ -48,7 +48,9 @@ body {
   .top .sub { order: 2; flex-basis: 100%; }
   /* Jump box and location button share one line: the select shrinks, the button doesn't. */
   .presets { flex-wrap: nowrap; }
-  .presets select { flex: 1 1 0; min-width: 0; max-width: none; font-size: 12.5px; }
+  /* flex-basis auto + width, not `1 1 0`: Firefox sizes the dropdown popup from the select's
+     flex basis, so a zero basis clipped the option text to the widest option's min width. */
+  .presets select { flex: 1 1 auto; width: 100%; min-width: 0; max-width: none; font-size: 12.5px; }
   .presets button.locate { flex: 0 0 auto; font-size: 12px; }
 }
 
@@ -190,3 +192,9 @@ body {
 .note strong { color: var(--ink); font-weight: 600; }
 .note em { font-style: italic; }
 .note a { color: var(--accent); }
+
+/* Narrow layout overrides for the jump select, placed last so they beat the desktop rule above
+   (same specificity, later wins). Firefox sizes the dropdown popup from the select box. */
+@media (max-width: 860px) {
+  .presets select { flex: 1 1 auto; width: 100%; max-width: none; }
+}
