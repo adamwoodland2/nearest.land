@@ -20,6 +20,9 @@ Free, runs entirely in your browser, no account, no adverts.
 - Country names on the globe, decluttered by zoom; crisp vector coastlines at any zoom.
 - **Share this view** — every pick puts `?at=lat,lon` in the address bar; the Share button uses
   the native share sheet where available, otherwise copies the link.
+- **Two modes** — *Coast* (default) snaps to the water's edge and follows each direction across
+  the sea; *Anywhere* starts from the exact point, on land or at sea, and follows each direction
+  to the first land that isn't the country you're in (from Berlin, east is Poland at 80 km).
 - **Show Me** (phones with a compass) — stand by the sea, tap it, and as you turn the phone the
   panel names the country across the water in the direction you face.
 

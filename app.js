@@ -267,8 +267,9 @@ function destination(lat, lon, bearing, d) {
   return { lat: p2 / DEG, lon: ((l2 / DEG + 540) % 360) - 180 };
 }
 
-// Walk one bearing to first landfall. null = land in view (blocked).
-function march(lat, lon, bearing) {
+// Walk one bearing to the first land cell, ignoring `skipId` (the home country in 'any' mode).
+// With `block`, land within BLOCK_KM returns null = "land in view".
+function march(lat, lon, bearing, skipId = 0, block = true) {
   const p1 = lat * DEG, l1 = lon * DEG, th = bearing * DEG;
   const sp1 = Math.sin(p1), cp1 = Math.cos(p1), sth = Math.sin(th), cth = Math.cos(th);
   for (let d = 3; d <= MAX_KM; d += d < 400 ? 3 : 8) {
@@ -277,9 +278,10 @@ function march(lat, lon, bearing) {
     const p2 = Math.asin(sp2);
     const l2 = l1 + Math.atan2(sth * sd * cp1, cd - sp1 * sp2);
     const id = landAt(p2 / DEG, l2 / DEG);
-    if (id) return d <= BLOCK_KM ? null : { id, km: d };
+    if (!id || id === skipId) continue;
+    return block && d <= BLOCK_KM ? null : { id, km: d };
   }
-  return { id: 0, km: MAX_KM }; // unreachable in practice: the circle returns to the shore you stand on
+  return { id: 0, km: MAX_KM }; // only possible for a country a great circle never leaves — none exist
 }
 
 // Nearest water cell that touches land: standing at the water's edge.
@@ -326,19 +328,33 @@ try { STEP = parseFloat(localStorage.getItem('nl-step')) || 1; } catch (e) { /* 
 const stepFromUrl = parseFloat(new URLSearchParams(location.search).get('step') || '');
 if ([1, 0.5, 0.25].includes(stepFromUrl)) STEP = stepFromUrl;
 if (![1, 0.5, 0.25].includes(STEP)) STEP = 1;
+// Mode: 'coast' snaps to the water's edge and walks to the first land (blank where land is in
+// view); 'any' starts from the exact point, on land or sea, and walks to the first land that is
+// not the country you are standing in.
+let MODE = 'coast';
+try { MODE = localStorage.getItem('nl-mode') === 'any' ? 'any' : 'coast'; } catch (e) { /* ignore */ }
+if (new URLSearchParams(location.search).get('mode') === 'any') MODE = 'any';
 const runWidth = (run) => run.count * STEP;                       // degrees
 const fmtDeg = (d) => `${Number.isInteger(d) ? d : +d.toFixed(2)}°`;
 
 function analyze(lat, lon) {
-  const p = snapToShore(lat, lon);
-  if (p === null) return null;
-  const at = cellCentre(p);
-  const home = homeCountry(p);
+  let at, home, skip = 0, block = true;
+  if (MODE === 'coast') {
+    const p = snapToShore(lat, lon);
+    if (p === null) return null;
+    at = cellCentre(p);
+    home = homeCountry(p);
+  } else {
+    at = { lat, lon };
+    home = landAt(lat, lon);      // 0 at sea
+    skip = home;
+    block = false;
+  }
   const antipode = { lat: -at.lat, lon: ((at.lon + 360) % 360) - 180 };
   antipode.id = landAt(antipode.lat, antipode.lon);
   const N = Math.round(360 / STEP);
   const view = new Array(N);
-  for (let i = 0; i < N; i++) view[i] = march(at.lat, at.lon, i * STEP);
+  for (let i = 0; i < N; i++) view[i] = march(at.lat, at.lon, i * STEP, skip, block);
   // Contiguous runs of the same destination. start/end are bearings in degrees; count is
   // the number of samples in the run.
   const runs = [];
@@ -358,7 +374,7 @@ function analyze(lat, lon) {
   for (const r of runs) { r.start = r.startI * STEP; r.end = r.endI * STEP; }
   runs.sort((a, b) => (a.wrap ? -1 : a.start) - (b.wrap ? -1 : b.start));
   runs.forEach((r, i) => { r.i = i; });
-  return { at, home, antipode, view, runs, step: STEP };
+  return { at, home, antipode, view, runs, step: STEP, mode: MODE };
 }
 
 // ---------------------------------------------------------------- globe
@@ -688,6 +704,7 @@ function drawLegend(res) {
     legend.appendChild(li);
   }
   const blocked = res.view.filter((v) => !v).length * res.step;
+  if (!blocked) return;
   const li = document.createElement('li');
   li.className = 'blocked';
   const sw = document.createElement('span'); sw.className = 'swatch'; sw.style.border = '1px dashed #4b5563';
@@ -715,7 +732,9 @@ function pick(lat, lon) {
   const place = $('#place');
   place.replaceChildren();
   const nm = document.createElement('p'); nm.className = 'name';
-  nm.textContent = `${names[res.home]} — ${fmtDeg(open)} of open water`;
+  nm.textContent = res.mode === 'any'
+    ? `${res.home ? names[res.home] : 'At sea'} — next country in every direction`
+    : `${names[res.home]} — ${fmtDeg(open)} of open water`;
   const co = document.createElement('p'); co.className = 'coords';
   co.textContent = `${Math.abs(res.at.lat).toFixed(2)}°${res.at.lat >= 0 ? 'N' : 'S'}, ${Math.abs(res.at.lon).toFixed(2)}°${res.at.lon >= 0 ? 'E' : 'W'} · computed in ${Math.round(performance.now() - t0)} ms`;
   place.append(nm, co);
@@ -723,7 +742,7 @@ function pick(lat, lon) {
   $('#viewLink').title = 'Copy or share a link to this view';
   $('#viewLinkStatus').textContent = '';
   // The address bar always holds a link to exactly this view.
-  history.replaceState(null, '', `?at=${res.at.lat.toFixed(3)},${res.at.lon.toFixed(3)}${STEP !== 1 ? `&step=${STEP}` : ''}`);
+  history.replaceState(null, '', `?at=${res.at.lat.toFixed(3)},${res.at.lon.toFixed(3)}${STEP !== 1 ? `&step=${STEP}` : ''}${MODE === 'any' ? '&mode=any' : ''}`);
   // On a stacked (phone) layout the results are below the globe — bring them into view.
   if (window.innerWidth < 860) document.querySelector('.panel').scrollIntoView({ behavior: 'smooth', block: 'start' });
   return res;
@@ -757,7 +776,9 @@ function pickFromUrl() {
   // pick every launch (and scrolling to it) is not what anyone wants, so standalone ignores ?at.
   const standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
   if (standalone) { if (location.search) history.replaceState(null, '', location.pathname); return false; }
-  const m = /^(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)$/.exec(new URLSearchParams(location.search).get('at') || '');
+  const q = new URLSearchParams(location.search);
+  if (q.get('mode') === 'any') setMode('any');
+  const m = /^(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)$/.exec(q.get('at') || '');
   if (!m) return false;
   const lat = parseFloat(m[1]), lon = parseFloat(m[2]);
   if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return false;
@@ -786,10 +807,23 @@ function setStep(step) {
 // Option values are "lat,lon" or "lat,lon,step": records carry the sampling step they were
 // computed with, so choosing one reproduces the record rather than re-running it at whatever
 // step happens to be selected.
+const modeSel = $('#mode');
+modeSel.value = MODE;
+function setMode(mode) {
+  if (mode !== 'coast' && mode !== 'any') return;
+  MODE = mode;
+  modeSel.value = mode;
+  try { localStorage.setItem('nl-mode', mode); } catch (e) { /* ignore */ }
+}
+modeSel.addEventListener('change', () => {
+  setMode(modeSel.value);
+  if (lastPick) pick(lastPick.lat, lastPick.lon);
+});
+
 $('#jump').addEventListener('change', (e) => {
   const [lat, lon, step] = e.target.value.split(',').map(parseFloat);
   if (Number.isNaN(lat) || Number.isNaN(lon)) return;
-  if (!Number.isNaN(step)) setStep(step);
+  if (!Number.isNaN(step)) { setStep(step); setMode('coast'); } // records are coast-mode results
   pick(lat, lon);
   flyTo(lat, lon);
 });
@@ -868,15 +902,21 @@ async function openCompass() {
   compass.el.hidden = false;
   compass.headingEl.textContent = '—';
   const shoreKm = res ? distKm(gpsPos, res.at) : Infinity;
-  if (!res || shoreKm > 30) {
+  if (res && MODE === 'any') {
+    compass.dial.classList.remove('noarrow');
+    compass.countryEl.textContent = 'Turn to face any direction';
+    compass.noteEl.textContent = res.home ? `Standing in ${names[res.home]}. The next country on each bearing.` : 'At sea. The first land on each bearing.';
+  } else if (!res || shoreKm > 30) {
     compass.dial.classList.add('noarrow');
     compass.countryEl.textContent = 'You need to be near the water';
     compass.noteEl.textContent = res ? `The nearest shore is about ${Math.round(shoreKm)} km away. Get within sight of the sea and try again.` : 'No coastline found near you.';
     return;
   }
-  compass.dial.classList.remove('noarrow');
-  compass.countryEl.textContent = 'Point your phone at the sea';
-  compass.noteEl.textContent = shoreKm > 15 ? `Using the ${names[res.home]} shore about ${Math.round(shoreKm)} km from you. Turn slowly.` : `Standing at the ${names[res.home]} shore. Turn slowly.`;
+  if (MODE !== 'any') {
+    compass.dial.classList.remove('noarrow');
+    compass.countryEl.textContent = 'Point your phone at the sea';
+    compass.noteEl.textContent = shoreKm > 15 ? `Using the ${names[res.home]} shore about ${Math.round(shoreKm)} km from you. Turn slowly.` : `Standing at the ${names[res.home]} shore. Turn slowly.`;
+  }
 
   // Heading source: iOS needs permission inside this tap; Android gives absolute alpha.
   if (iosCompass) {
@@ -918,7 +958,7 @@ function updateCompass() {
   const v = res.view[idx];
   if (!v) { compass.countryEl.textContent = 'Land that way'; compass.noteEl.textContent = 'Turn towards the water.'; return; }
   compass.countryEl.textContent = names[v.id];
-  compass.noteEl.textContent = `${fmtKm(v.km)} across the water on this bearing${v.km > ANTIPODE_KM ? ' (beyond the antipode)' : ''}.`;
+  compass.noteEl.textContent = `${fmtKm(v.km)} ${res.mode === 'any' ? 'away on this bearing' : 'across the water on this bearing'}${v.km > ANTIPODE_KM ? ' (beyond the antipode)' : ''}.`;
 }
 
 function closeCompass() {
@@ -945,4 +985,4 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
 }
 
 // Read-only test hook.
-window.__ATW = { analyze, pick, names, landAt, texW: TEX_W, cam: () => camera.position, borders: () => borders, globe, tex: () => texture.image, aniso: maxAniso, mipmaps: texture.generateMipmaps, compass: { open: openCompass, close: closeCompass, state: () => ({ heading: compass.heading, country: compass.countryEl.textContent, note: compass.noteEl.textContent, hidden: compass.el.hidden, noarrow: compass.dial.classList.contains('noarrow') }) }, capable: { hasGeo, directionCapable }, labels: () => labels.filter((l) => !l.el.hidden).map((l) => l.el.textContent), showGps, highlightRun };
+window.__ATW = { setMode, analyze, pick, names, landAt, texW: TEX_W, cam: () => camera.position, borders: () => borders, globe, tex: () => texture.image, aniso: maxAniso, mipmaps: texture.generateMipmaps, compass: { open: openCompass, close: closeCompass, state: () => ({ heading: compass.heading, country: compass.countryEl.textContent, note: compass.noteEl.textContent, hidden: compass.el.hidden, noarrow: compass.dial.classList.contains('noarrow') }) }, capable: { hasGeo, directionCapable }, labels: () => labels.filter((l) => !l.el.hidden).map((l) => l.el.textContent), showGps, highlightRun };
