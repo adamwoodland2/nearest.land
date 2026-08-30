@@ -196,5 +196,7 @@ body {
 /* Narrow layout overrides for the jump select, placed last so they beat the desktop rule above
    (same specificity, later wins). Firefox sizes the dropdown popup from the select box. */
 @media (max-width: 860px) {
+  .presets { flex-wrap: nowrap; }
   .presets select { flex: 1 1 auto; width: 100%; max-width: none; }
+  .presets button.locate { flex: 0 0 auto; }
 }
