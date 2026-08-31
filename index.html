@@ -76,6 +76,13 @@
           </svg>
         </div>
         <p class="compass-heading" id="compassHeading">-</p>
+        <label class="compass-mode">Mode
+          <select id="compassMode" aria-label="Pick mode">
+            <option value="coast">Coast</option>
+            <option value="any">Anywhere</option>
+            <option value="land">Over land</option>
+          </select>
+        </label>
         <p class="compass-country" id="compassCountry">Point your phone at the sea</p>
         <p class="compass-note" id="compassNote"></p>
       </div>
@@ -85,6 +92,7 @@
       <div class="loadbox">
         <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="progress"><div class="bar" id="bar"></div></div>
         <p id="loadmsg">Downloading the world&hellip;</p>
+        <button type="button" id="skipTerrain" hidden>Load Political Only</button>
       </div>
     </div>
     <div class="presets" id="presets">
@@ -133,6 +141,12 @@
           <option value="land">Over land</option>
         </select>
       </label>
+      <label class="step-ctl">Map
+        <select id="layer" aria-label="Globe layer">
+          <option value="political">Political</option>
+          <option value="terrain">Terrain</option>
+        </select>
+      </label>
     </p>
     <ol class="legend" id="legend"></ol>
     <p class="note"><strong>Three modes.</strong> <em>Coast</em> snaps your pick to the water's edge and follows each direction across the sea to its first landfall; land within about 20 km in a direction counts as "land in view" and is left blank. <em>Anywhere</em> starts from the exact point you tapped, on land or at sea, and follows each direction to the first land that is not the country you are standing in - so from Berlin, east is Poland at 80 km. <em>Over land</em> does the same but never crosses water: a direction that reaches the sea first is left blank.</p>
@@ -140,7 +154,7 @@
     <p class="note">There is also no such thing as <em>the</em> coastline. This is the <a href="https://en.wikipedia.org/wiki/Coastline_paradox" target="_blank" rel="noopener">coastline paradox</a>: the finer you measure a coast, the longer it gets, without limit - every bay contains smaller bays. So any answer depends on the map's level of detail. Here it is Natural Earth's 1:10m outlines (public domain), which is generous for a globe and coarse for a beach.</p>
     <p class="note contact">Free, open source (MIT), nothing tracked. Questions or corrections: <a href="mailto:adam@nearest.land">adam@nearest.land</a></p>
     <p class="note">Like this? Also see <a href="https://orrery.live/">orrery.live</a> for a 3D tour of the solar system.</p>
-    <p class="note credits">Built with <a href="https://threejs.org/" target="_blank" rel="noopener">three.js</a> (MIT) and <a href="https://github.com/topojson/topojson-client" target="_blank" rel="noopener">topojson-client</a> (ISC). Country outlines: <a href="https://www.naturalearthdata.com/" target="_blank" rel="noopener">Natural Earth</a> 1:10m (public domain) via <a href="https://github.com/topojson/world-atlas" target="_blank" rel="noopener">world-atlas</a> (ISC). Code: <a href="LICENSE">MIT licence</a>.</p>
+    <p class="note credits">Built with <a href="https://threejs.org/" target="_blank" rel="noopener">three.js</a> (MIT) and <a href="https://github.com/topojson/topojson-client" target="_blank" rel="noopener">topojson-client</a> (ISC). Country outlines and the Terrain map: <a href="https://www.naturalearthdata.com/" target="_blank" rel="noopener">Natural Earth</a> (public domain), outlines via <a href="https://github.com/topojson/world-atlas" target="_blank" rel="noopener">world-atlas</a> (ISC). Code: <a href="LICENSE">MIT licence</a>.</p>
   </aside>
 </main>
 

@@ -620,6 +620,73 @@ if (qs.has('debug')) {
   document.querySelector('.top').appendChild(strip);
 }
 const globe = new THREE.Mesh(new THREE.SphereGeometry(1, 128, 96), new THREE.MeshBasicMaterial({ map: texture }));
+
+// ------------------------------------------------------------------ display layers
+// 'political' is the generated per-country texture above; 'terrain' is Natural Earth I
+// (1:50m, public domain) pre-resized to data/ne1-8192.jpg / ne1-4096.jpg. Cosmetic only:
+// the analysis raster, borders, labels and paths are unaffected. Fetched on first use;
+// the service worker then keeps it cache-first like other images.
+const LAYERS = ['political', 'terrain'];
+let LAYER = 'political';
+try { const l = localStorage.getItem('nl-layer'); if (LAYERS.includes(l)) LAYER = l; } catch (e) { /* ignore */ }
+let terrainTex = null, terrainPromise = null;
+// 16384 (11 MB, ~2.4 km/px) only where the GPU and memory clearly allow it; the political
+// canvas texture stays at TEX_W regardless.
+const TERRAIN_URL = `data/ne1-${TEX_W >= 8192
+  ? (renderer.capabilities.maxTextureSize >= 16384 && (navigator.deviceMemory === undefined || navigator.deviceMemory >= 8) && !lowMem ? 16384 : 8192)
+  : 4096}.jpg`;
+// Byte-counted download (so the loading bar can track it), abortable via `signal`.
+// Memoised: concurrent callers share one download; a failure or abort clears it for retry.
+function ensureTerrain(onPct, signal) {
+  if (terrainTex) return Promise.resolve();
+  if (!terrainPromise) {
+    terrainPromise = (async () => {
+      const resp = await fetch(TERRAIN_URL, { signal });
+      const total = Number(resp.headers.get('content-length')) || 11e6;
+      const reader = resp.body.getReader();
+      const chunks = []; let got = 0;
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value); got += value.length;
+        if (onPct) onPct(Math.min(1, got / total));
+      }
+      const img = new Image();
+      const url = URL.createObjectURL(new Blob(chunks, { type: 'image/jpeg' }));
+      try { img.src = url; await img.decode(); } finally { URL.revokeObjectURL(url); }
+      terrainTex = new THREE.Texture(img);
+      terrainTex.colorSpace = THREE.SRGBColorSpace;
+      terrainTex.anisotropy = maxAniso;
+      terrainTex.generateMipmaps = texture.generateMipmaps;
+      terrainTex.minFilter = texture.minFilter;
+      terrainTex.needsUpdate = true;
+    })().catch((e) => { terrainPromise = null; throw e; });
+  }
+  return terrainPromise;
+}
+async function applyLayer(onPct, signal) {
+  let map = texture;
+  if (LAYER === 'terrain') {
+    try { await ensureTerrain(onPct, signal); } catch (e) { return false; } // offline or aborted: stay political
+    if (LAYER !== 'terrain') return true; // switched back while downloading
+    map = terrainTex;
+  }
+  if (globe.material.map !== map) { globe.material.map = map; globe.material.needsUpdate = true; }
+  return true;
+}
+const layerSel = $('#layer');
+function setLayer(layer) {
+  if (!LAYERS.includes(layer)) return;
+  LAYER = layer;
+  layerSel.value = layer;
+  try { localStorage.setItem('nl-layer', layer); } catch (e) { /* ignore */ }
+  applyLayer();
+}
+layerSel.value = LAYER;
+layerSel.addEventListener('change', () => setLayer(layerSel.value));
+{ const l = new URLSearchParams(location.search).get('layer'); if (LAYERS.includes(l)) { LAYER = l; layerSel.value = l; } }
+// When terrain is the saved layer, its download is folded into the initial loading bar (with a
+// skip button) at the end of startup, so the political colours never flash first.
 scene.add(globe);
 await progress(88, 'Drawing coastlines and borders…');
 
@@ -751,6 +818,8 @@ canvas.addEventListener('pointerup', (e) => {
   down = null;
   if (moved > (e.pointerType === 'touch' ? 12 : 5)) return;
   raycaster.setFromCamera(ndcOf(e), camera);
+  // Clicking the marker itself clears the pick, same as clicking off the globe.
+  if (marker.visible && raycaster.intersectObject(marker).length) { clearPick(); return; }
   const hit = raycaster.intersectObject(globe)[0];
   if (!hit) { clearPick(); return; } // clicked off the globe: clear the selection
   const { lat, lon } = fromVec(hit.point);
@@ -1003,12 +1072,22 @@ $('#viewLink').addEventListener('click', shareView);
 // Option values are "lat,lon" or "lat,lon,mode": records carry the mode they were computed in.
 const modeSel = $('#mode');
 modeSel.value = MODE;
+const compassModeSel = $('#compassMode');
 function setMode(mode) {
   if (!MODES.includes(mode)) return;
   MODE = mode;
   modeSel.value = mode;
+  compassModeSel.value = mode;
   try { localStorage.setItem('nl-mode', mode); } catch (e) { /* ignore */ }
 }
+// The mode selector inside Show Me: switch modes without leaving the compass. The globe view
+// behind follows (same as the main selector), and the compass re-reads the new analysis.
+compassModeSel.addEventListener('change', () => {
+  setMode(compassModeSel.value);
+  if (lastPick) pick(lastPick.lat, lastPick.lon);
+  if (compassAnalyse()) startHeading();   // no-op if already listening
+  if (compass.heading !== null) updateCompass();
+});
 modeSel.addEventListener('change', () => {
   setMode(modeSel.value);
   if (lastPick) pick(lastPick.lat, lastPick.lon);
@@ -1096,29 +1175,42 @@ const compass = {
   }
 }
 
-async function openCompass() {
+// Analyse the user's position for the compass and set the dial/notes. Returns false when the
+// current mode has nothing to show here (Coast mode, far from any shore).
+function compassAnalyse() {
   const res = analyze(gpsPos.lat, gpsPos.lon);
   compass.res = res;
-  compass.heading = null; compass.rot = 0;
-  compass.el.hidden = false;
-  compass.headingEl.textContent = '-';
   const shoreKm = res ? distKm(gpsPos, res.at) : Infinity;
   if (res && MODE !== 'coast') {
     compass.dial.classList.remove('noarrow');
     compass.countryEl.textContent = 'Turn to face any direction';
     compass.noteEl.textContent = res.home ? `Standing in ${names[res.home]}. The next country on each bearing${MODE === 'land' ? ', over land only' : ''}.` : 'At sea. The first land on each bearing.';
-  } else if (!res || shoreKm > 30) {
+    return true;
+  }
+  if (!res || shoreKm > 30) {
     compass.dial.classList.add('noarrow');
     compass.countryEl.textContent = 'You need to be near the water';
     compass.noteEl.textContent = res ? `The nearest shore is about ${Math.round(shoreKm)} km away. Get within sight of the sea and try again.` : 'No coastline found near you.';
-    return;
+    return false;
   }
-  if (MODE === 'coast') {
-    compass.dial.classList.remove('noarrow');
-    compass.countryEl.textContent = 'Point your phone at the sea';
-    compass.noteEl.textContent = shoreKm > 15 ? `Using the ${names[res.home]} shore about ${Math.round(shoreKm)} km from you. Turn slowly.` : `Standing at the ${names[res.home]} shore. Turn slowly.`;
-  }
+  compass.dial.classList.remove('noarrow');
+  compass.countryEl.textContent = 'Point your phone at the sea';
+  compass.noteEl.textContent = shoreKm > 15 ? `Using the ${names[res.home]} shore about ${Math.round(shoreKm)} km from you. Turn slowly.` : `Standing at the ${names[res.home]} shore. Turn slowly.`;
+  return true;
+}
+async function openCompass() {
+  compass.heading = null; compass.rot = 0;
+  compass.el.hidden = false;
+  compass.headingEl.textContent = '-';
+  compassModeSel.value = MODE;
+  if (!compassAnalyse()) return; // heading starts on a later mode switch if needed
+  await startHeading();
+}
 
+// Attach the device-orientation listener (asking iOS for permission - must be inside a user
+// gesture, which both the Show Me tap and a mode-select change are).
+async function startHeading() {
+  if (compass.listener) return;
   // Heading source: iOS needs permission inside this tap; Android gives absolute alpha.
   if (iosCompass) {
     try {
@@ -1155,8 +1247,10 @@ function onOrientation(e) {
 
 function updateCompass() {
   const h = compass.heading, res = compass.res;
+  if (h === null) return;
   compass.ring.style.transform = `rotate(${compass.rot}deg)`;
   compass.headingEl.textContent = `Facing ${Math.round(h)}°`;
+  if (!res) return;
   const idx = Math.round(h / res.step) % res.view.length;
   const v = res.view[idx];
   if (!v) { compass.countryEl.textContent = res.mode === 'land' ? 'Sea that way' : 'Land that way'; compass.noteEl.textContent = res.mode === 'land' ? 'No other country over land on this bearing.' : 'Turn towards the water.'; return; }
@@ -1177,6 +1271,16 @@ if (navigator.permissions && navigator.permissions.query) {
   navigator.permissions.query({ name: 'geolocation' }).then((p) => { if (p.state === 'granted') requestGps(false); }).catch(() => {});
 }
 
+if (LAYER === 'terrain') {
+  const skip = $('#skipTerrain');
+  const ac = new AbortController();
+  skip.hidden = false;
+  skip.addEventListener('click', () => { skip.disabled = true; ac.abort(); }, { once: true });
+  await progress(90, 'Downloading the terrain map…');
+  const ok = await applyLayer((f) => { bar.style.width = `${90 + 9 * f}%`; }, ac.signal);
+  if (!ok) setLayer('political');   // skipped or offline: political, and remembered
+  skip.hidden = true;
+}
 await progress(100, 'Ready');
 $('#loading').hidden = true;
 pickFromUrl();
