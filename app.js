@@ -651,10 +651,12 @@ function ensureTerrain(onPct, signal) {
         chunks.push(value); got += value.length;
         if (onPct) onPct(Math.min(1, got / total));
       }
-      const img = new Image();
-      const url = URL.createObjectURL(new Blob(chunks, { type: 'image/jpeg' }));
-      try { img.src = url; await img.decode(); } finally { URL.revokeObjectURL(url); }
-      terrainTex = new THREE.Texture(img);
+      // Decode via createImageBitmap, not an <img> with a blob: URL - the CSP's
+      // img-src 'self' data: blocks blob: loads, but bitmap decoding is not a resource load.
+      // flipY is baked in at decode (three.js ignores .flipY for ImageBitmaps).
+      const bitmap = await createImageBitmap(new Blob(chunks, { type: 'image/jpeg' }), { imageOrientation: 'flipY' });
+      terrainTex = new THREE.Texture(bitmap);
+      terrainTex.flipY = false;
       terrainTex.colorSpace = THREE.SRGBColorSpace;
       terrainTex.anisotropy = maxAniso;
       terrainTex.generateMipmaps = texture.generateMipmaps;
