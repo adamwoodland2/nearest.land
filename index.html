@@ -59,7 +59,9 @@
     <canvas id="globe"></canvas>
     <div class="puzzle" id="puzzle" hidden role="dialog" aria-label="Daily puzzle">
       <div class="puzzle-box">
+        <button type="button" class="compass-close puzzle-min" id="puzzleMin" aria-label="Minimise">–</button>
         <button type="button" class="compass-close" id="puzzleClose" aria-label="Close">×</button>
+        <button type="button" class="puzzle-mini" id="puzzleMini" hidden></button>
         <h2 class="puzzle-title" id="puzzleTitle">Where on Earth?</h2>
         <p class="puzzle-sub">This is the view from a mystery shore - each colour is the country across the water on that bearing (hover or tap the wedges). Click the globe to guess where it is. Six guesses; within 100 km wins.</p>
         <svg id="puzzleChart" viewBox="-14 -14 388 388" role="img" aria-label="The mystery view over the water"></svg>

@@ -1329,6 +1329,7 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
 const puzzle = {
   el: $('#puzzle'), chart: $('#puzzleChart'), guessesEl: $('#puzzleGuesses'), statusEl: $('#puzzleStatus'),
   shareBtn: $('#puzzleShare'), revealBtn: $('#puzzleReveal'), titleEl: $('#puzzleTitle'),
+  boxEl: document.querySelector('.puzzle-box'), miniEl: $('#puzzleMini'),
   active: false, num: 0, answer: null, guesses: [], done: false, won: false,
 };
 const PUZZLE_EPOCH = Date.UTC(2026, 7, 31);                // puzzle #1 = 31 August 2026
@@ -1401,6 +1402,8 @@ function puzzleGuess(lat, lon) {
   else if (puzzle.guesses.length >= GUESS_LIMIT) puzzle.done = true;
   savePuzzle();
   renderPuzzle();
+  // A finished game deserves the full card; mid-game on a phone, stay out of the way.
+  if (puzzle.active) setCollapsed(!puzzle.done && window.innerWidth <= 860);
 }
 
 function renderPuzzle() {
@@ -1420,6 +1423,14 @@ function renderPuzzle() {
     ? (puzzle.won ? `Got it in ${puzzle.guesses.length} - new puzzle at midnight UTC.` : 'Out of guesses - reveal below, new puzzle at midnight UTC.')
     : (puzzle.guesses.length ? `${left} ${left === 1 ? 'guess' : 'guesses'} left. The arrow points from your guess towards the answer.` : '');
   puzzle.shareBtn.hidden = puzzle.revealBtn.hidden = !puzzle.done;
+  const last = puzzle.guesses[puzzle.guesses.length - 1];
+  puzzle.miniEl.textContent = puzzle.done
+    ? (puzzle.won ? `Daily #${puzzle.num} solved in ${puzzle.guesses.length}` : `Daily #${puzzle.num} - out of guesses`)
+    : (last ? `${fmtKm(last.km)} ${arrowFor(last.bearing)} · ${GUESS_LIMIT - puzzle.guesses.length} left` : `Daily #${puzzle.num} - tap the globe to guess`);
+}
+function setCollapsed(on) {
+  puzzle.boxEl.classList.toggle('collapsed', on);
+  puzzle.miniEl.hidden = !on;
 }
 
 function openPuzzle() {
@@ -1438,6 +1449,9 @@ function openPuzzle() {
   }
   clearPick();
   renderPuzzle();
+  // On a phone the card would cover the globe: start collapsed after the first guess exists,
+  // and auto-collapse there on open so the globe is visible; desktop opens expanded.
+  setCollapsed(window.innerWidth <= 860 && puzzle.guesses.length > 0 && !puzzle.done);
   puzzle.active = true;
   puzzle.el.hidden = false;
   guessDots.visible = true;
@@ -1451,6 +1465,8 @@ function closePuzzle() {
 }
 $('#daily').addEventListener('click', openPuzzle);
 $('#puzzleClose').addEventListener('click', closePuzzle);
+$('#puzzleMin').addEventListener('click', () => setCollapsed(true));
+puzzle.miniEl.addEventListener('click', () => setCollapsed(false));
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && puzzle.active) closePuzzle(); });
 puzzle.revealBtn.addEventListener('click', () => {
   closePuzzle();

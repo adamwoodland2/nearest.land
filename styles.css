@@ -112,6 +112,7 @@ body {
 }
 /* Inside the puzzle card the close button is smaller and the heading keeps clear of it. */
 .puzzle-box .compass-close { top: 10px; right: 10px; width: 32px; height: 32px; font-size: 20px; }
+.puzzle-box .puzzle-min.compass-close { right: 48px; font-size: 22px; }
 .puzzle-title, .puzzle-sub { padding-right: 36px; }
 .compass-body { display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center; max-width: 420px; width: 100%; }
 .compass-dial { position: relative; width: min(70vw, 300px); aspect-ratio: 1; }
@@ -196,8 +197,18 @@ body.puzzle-open .panel { visibility: hidden; }
 .puzzle-box {
   pointer-events: auto; position: absolute; top: 58px; right: 12px;
   width: min(400px, calc(100vw - 24px)); max-height: calc(100vh - 80px); overflow: auto;
-  background: rgba(17,24,39,0.96); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px;
+  background: #111827; border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px;
 }
+/* Collapsed: everything gives way to a one-line summary bar, so the globe is clear to aim at. */
+.puzzle-box.collapsed > :not(.puzzle-mini) { display: none !important; } /* beats #puzzleChart { display: block } */
+.puzzle-box.collapsed { padding: 0; overflow: hidden; }
+.puzzle-mini {
+  display: block; width: 100%; text-align: left; cursor: pointer;
+  font: inherit; font-size: 13px; font-weight: 600; color: var(--ink);
+  background: transparent; border: 0; padding: 11px 14px;
+}
+.puzzle-mini::after { content: " ▴"; color: var(--muted); }
+.puzzle-min { font-size: 22px; }
 .puzzle-title { margin: 0 0 4px; font-size: 17px; }
 .puzzle-sub { margin: 0 0 8px; color: var(--muted); font-size: 12.5px; }
 #puzzleChart { width: min(100%, 300px); display: block; margin: 0 auto; }
@@ -210,7 +221,9 @@ body.puzzle-open .panel { visibility: hidden; }
 .puzzle-actions button { font: inherit; font-size: 12.5px; font-weight: 600; color: var(--ink); background: transparent; border: 1px solid var(--line); border-radius: 999px; padding: 5px 12px; cursor: pointer; }
 .puzzle-actions button:hover { border-color: var(--accent); }
 @media (max-width: 860px) {
-  .puzzle-box { top: auto; bottom: 10px; right: 12px; left: 12px; width: auto; max-height: 52vh; }
+  .puzzle-box { top: auto; bottom: 10px; right: 12px; left: 12px; width: auto; max-height: 45vh; }
+  #puzzleChart { width: min(100%, 210px); }
+  .puzzle-sub { font-size: 12px; }
 }
 .layer-status { font-variant-numeric: tabular-nums; color: var(--muted); font-weight: 500; min-width: 3.5ch; }
 .step-ctl select { font: inherit; font-size: 12px; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 2px 6px; cursor: pointer; }
