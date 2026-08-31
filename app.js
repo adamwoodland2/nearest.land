@@ -677,11 +677,24 @@ async function applyLayer(onPct, signal) {
   return true;
 }
 const layerSel = $('#layer');
+const layerStatus = $('#layerStatus');
 function setLayer(layer) {
   if (!LAYERS.includes(layer)) return;
   LAYER = layer;
   layerSel.value = layer;
   try { localStorage.setItem('nl-layer', layer); } catch (e) { /* ignore */ }
+  refreshLayer();
+}
+// Runtime layer switch: show download progress beside the selector while the terrain image
+// arrives (the first switch costs a few seconds; after that it is cached and instant).
+async function refreshLayer() {
+  if (LAYER === 'terrain' && !terrainTex) {
+    layerStatus.textContent = '0%';
+    const ok = await applyLayer((f) => { layerStatus.textContent = `${Math.round(f * 100)}%`; });
+    layerStatus.textContent = '';
+    if (!ok && LAYER === 'terrain') setLayer('political'); // offline: fall back visibly
+    return;
+  }
   applyLayer();
 }
 layerSel.value = LAYER;

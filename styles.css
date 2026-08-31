@@ -179,6 +179,7 @@ body {
 .legend-head { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); display: flex; align-items: center; gap: 10px; }
 .step-ctl { display: inline-flex; align-items: center; gap: 6px; text-transform: none; letter-spacing: 0; font-weight: 500; }
 .step-ctl:first-of-type { margin-left: auto; }
+.layer-status { font-variant-numeric: tabular-nums; color: var(--muted); font-weight: 500; min-width: 3.5ch; }
 .step-ctl select { font: inherit; font-size: 12px; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 2px 6px; cursor: pointer; }
 .legend { list-style: none; display: flex; flex-direction: column; gap: 2px; }
 .legend li { display: grid; grid-template-columns: 14px 1fr auto; gap: 10px; align-items: baseline; font-size: 14px; padding: 3px 6px; margin: 0 -6px; border-radius: 6px; cursor: default; }
