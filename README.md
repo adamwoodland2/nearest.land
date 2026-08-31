@@ -24,6 +24,8 @@ Free, runs entirely in your browser, no account, no adverts.
   the sea; *Anywhere* starts from the exact point, on land or at sea, and follows each direction
   to the first land that isn't the country you're in (from Berlin, east is Poland at 80 km);
   *Over land* is the same but never crosses water.
+- **Daily puzzle** - one mystery shore per UTC day, the same for everyone: guess where it is
+  from its view alone, six tries, Worldle-style emoji share.
 - **Show Me** (phones with a compass) — stand by the sea, tap it, and as you turn the phone the
   panel names the country across the water in the direction you face.
 
