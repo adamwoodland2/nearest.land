@@ -677,12 +677,19 @@ async function applyLayer(onPct, signal) {
   return true;
 }
 const layerSel = $('#layer');
+// The shareable URL: the picked point plus any non-default mode and map layer.
+let lastAt = null;
+function writeUrl() {
+  if (!lastAt) return;
+  history.replaceState(null, '', `?at=${lastAt}${MODE !== 'coast' ? `&mode=${MODE}` : ''}${LAYER !== 'political' ? `&layer=${LAYER}` : ''}`);
+}
 const layerStatus = $('#layerStatus');
 function setLayer(layer) {
   if (!LAYERS.includes(layer)) return;
   LAYER = layer;
   layerSel.value = layer;
   try { localStorage.setItem('nl-layer', layer); } catch (e) { /* ignore */ }
+  writeUrl();
   refreshLayer();
 }
 // Runtime layer switch: show download progress beside the selector while the terrain image
@@ -866,6 +873,7 @@ function clearPick() {
   const hint = document.createElement('p'); hint.className = 'hint';
   hint.textContent = 'Nothing picked. Click the globe - a coastline in Coast mode, any point on land or sea in Anywhere or Over land - or try one of the places under it.';
   place.appendChild(hint);
+  lastAt = null;
   history.replaceState(null, '', location.pathname);
   $('#jump').value = '';
   $('#viewLink').disabled = true;
@@ -1038,7 +1046,8 @@ function pick(lat, lon) {
   $('#viewLink').title = 'Copy or share a link to this view';
   $('#viewLinkStatus').textContent = '';
   // The address bar always holds a link to exactly this view.
-  history.replaceState(null, '', `?at=${res.at.lat.toFixed(3)},${res.at.lon.toFixed(3)}${MODE !== 'coast' ? `&mode=${MODE}` : ''}`);
+  lastAt = `${res.at.lat.toFixed(3)},${res.at.lon.toFixed(3)}`;
+  writeUrl();
   // On a stacked (phone) layout the results are below the globe — bring them into view.
   if (window.innerWidth < 860) document.querySelector('.panel').scrollIntoView({ behavior: 'smooth', block: 'start' });
   return res;
