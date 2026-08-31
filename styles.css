@@ -157,6 +157,12 @@ body {
 .place .coords { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
 .place .hint { color: var(--muted); }
 .viewlink-wrap { display: inline-flex; align-items: center; gap: 10px; margin-left: auto; }
+.daily-btn {
+  font: inherit; font-size: 13px; font-weight: 700; cursor: pointer;
+  color: var(--ink); background: transparent; border: 1px solid var(--accent);
+  border-radius: 999px; padding: 7px 14px;
+}
+.daily-btn:hover { background: rgba(255, 200, 87, 0.12); }
 .viewlink {
   font: inherit; font-size: 13px; font-weight: 600;
   color: var(--bg); background: var(--accent); border: 0; border-radius: 999px;
@@ -168,23 +174,46 @@ body {
 
 .chart-wrap { display: grid; place-items: center; }
 #chart { width: min(100%, 340px); height: auto; }
-#chart .ring { fill: none; stroke: var(--line); stroke-width: 1; }
-#chart .tick { stroke: var(--line); stroke-width: 1; }
-#chart .tick-label { fill: var(--muted); font-size: 11px; text-anchor: middle; font-weight: 600; }
-#chart .you { fill: var(--accent); }
-#chart .wedge { stroke: none; }
-#chart .wedge:hover { opacity: 0.75; }
+#chart .ring, #puzzleChart .ring { fill: none; stroke: var(--line); stroke-width: 1; }
+#chart .tick, #puzzleChart .tick { stroke: var(--line); stroke-width: 1; }
+#chart .tick-label, #puzzleChart .tick-label { fill: var(--muted); font-size: 11px; text-anchor: middle; font-weight: 600; }
+#chart .you, #puzzleChart .you { fill: var(--accent); }
+#chart .wedge, #puzzleChart .wedge { stroke: none; }
+#chart .wedge:hover, #puzzleChart .wedge:hover { opacity: 0.75; }
 
 .legend-count { font-weight: 500; text-transform: none; letter-spacing: 0; color: var(--muted); }
 .legend-head { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); display: flex; align-items: center; gap: 10px; }
 .step-ctl { display: inline-flex; align-items: center; gap: 6px; text-transform: none; letter-spacing: 0; font-weight: 500; }
 .step-ctl:first-of-type { margin-left: auto; }
+/* While the puzzle is open the ordinary results panel is noise (and on a phone it sits right
+   under the card) - hide it, keeping the globe interactive. */
+body.puzzle-open .panel { visibility: hidden; }
+.puzzle { position: fixed; inset: 0; pointer-events: none; z-index: 40; }
+.puzzle-box {
+  pointer-events: auto; position: absolute; top: 58px; right: 12px;
+  width: min(400px, calc(100vw - 24px)); max-height: calc(100vh - 80px); overflow: auto;
+  background: rgba(17,24,39,0.96); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px;
+}
+.puzzle-title { margin: 0 0 4px; font-size: 17px; }
+.puzzle-sub { margin: 0 0 8px; color: var(--muted); font-size: 12.5px; }
+#puzzleChart { width: min(100%, 300px); display: block; margin: 0 auto; }
+#puzzleChart .wedge:hover { opacity: 0.75; }
+.puzzle-guesses { list-style: none; margin: 8px 0 0; padding: 0; font-size: 13px; }
+.puzzle-guesses li { display: flex; align-items: center; gap: 8px; padding: 3px 0; font-variant-numeric: tabular-nums; }
+.puzzle-guesses .sq { letter-spacing: 1px; }
+.puzzle-status { margin: 8px 0 0; font-size: 13px; font-weight: 600; }
+.puzzle-actions { display: flex; gap: 8px; margin-top: 10px; }
+.puzzle-actions button { font: inherit; font-size: 12.5px; font-weight: 600; color: var(--ink); background: transparent; border: 1px solid var(--line); border-radius: 999px; padding: 5px 12px; cursor: pointer; }
+.puzzle-actions button:hover { border-color: var(--accent); }
+@media (max-width: 860px) {
+  .puzzle-box { top: auto; bottom: 10px; right: 12px; left: 12px; width: auto; max-height: 52vh; }
+}
 .layer-status { font-variant-numeric: tabular-nums; color: var(--muted); font-weight: 500; min-width: 3.5ch; }
 .step-ctl select { font: inherit; font-size: 12px; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 2px 6px; cursor: pointer; }
 .legend { list-style: none; display: flex; flex-direction: column; gap: 2px; }
 .legend li { display: grid; grid-template-columns: 14px 1fr auto; gap: 10px; align-items: baseline; font-size: 14px; padding: 3px 6px; margin: 0 -6px; border-radius: 6px; cursor: default; }
 .legend li.hl, .legend li:hover { background: rgba(255,200,87,0.12); }
-#chart .wedge.hl { stroke: #fff; stroke-width: 1.5; }
+#chart .wedge.hl, #puzzleChart .wedge.hl { stroke: #fff; stroke-width: 1.5; }
 .legend .swatch { width: 14px; height: 14px; border-radius: 3px; transform: translateY(2px); }
 .legend .country { font-weight: 600; }
 .legend .country small { color: var(--muted); font-weight: 400; margin-left: 6px; }

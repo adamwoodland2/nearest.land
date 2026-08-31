@@ -51,12 +51,26 @@
 <header class="top">
   <h1 class="brand">nearest<span class="brand-tld">.land</span></h1>
   <p class="sub">Click to pick a point - a coast in Coast mode, anywhere in the other modes · right-drag to turn · scroll to zoom · touch: tap, drag, pinch.</p>
-  <span class="viewlink-wrap"><button type="button" class="viewlink" id="viewLink" disabled title="Pick a point first">Share this view</button><span class="viewlink-status" id="viewLinkStatus"></span></span>
+  <span class="viewlink-wrap"><button type="button" class="daily-btn" id="daily">Daily puzzle</button><button type="button" class="viewlink" id="viewLink" disabled title="Pick a point first">Share this view</button><span class="viewlink-status" id="viewLinkStatus"></span></span>
 </header>
 
 <main class="layout">
   <section class="globe-wrap" aria-label="Globe">
     <canvas id="globe"></canvas>
+    <div class="puzzle" id="puzzle" hidden role="dialog" aria-label="Daily puzzle">
+      <div class="puzzle-box">
+        <button type="button" class="compass-close" id="puzzleClose" aria-label="Close">×</button>
+        <h2 class="puzzle-title" id="puzzleTitle">Where on Earth?</h2>
+        <p class="puzzle-sub">This is the view from a mystery shore - each colour is the country across the water on that bearing (hover or tap the wedges). Click the globe to guess where it is. Six guesses; within 100 km wins.</p>
+        <svg id="puzzleChart" viewBox="-14 -14 388 388" role="img" aria-label="The mystery view over the water"></svg>
+        <ol class="puzzle-guesses" id="puzzleGuesses"></ol>
+        <p class="puzzle-status" id="puzzleStatus"></p>
+        <div class="puzzle-actions">
+          <button type="button" id="puzzleShare" hidden>Share result</button>
+          <button type="button" id="puzzleReveal" hidden>Show on the globe</button>
+        </div>
+      </div>
+    </div>
     <div class="labels" id="labels" aria-hidden="true"></div>
     <div class="compass" id="compass" hidden role="dialog" aria-label="Which country is in front of you">
       <button type="button" class="compass-close" id="compassClose" aria-label="Close">×</button>

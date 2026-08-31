@@ -845,6 +845,7 @@ canvas.addEventListener('pointerup', (e) => {
   const hit = raycaster.intersectObject(globe)[0];
   if (!hit) { clearPick(); return; } // clicked off the globe: clear the selection
   const { lat, lon } = fromVec(hit.point);
+  if (puzzle.active) { puzzleGuess(lat, lon); return; }
   $('#jump').value = '';
   pick(lat, lon);
 });
@@ -957,28 +958,30 @@ function highlightRun(i, scroll = false) {
   for (const line of linesGroup.children) line.material.opacity = i < 0 ? 0.85 : (line.userData.run === i ? 1 : 0.25);
 }
 
-function drawChart(res) {
-  svg.replaceChildren();
-  svg.setAttribute('viewBox', '-14 -14 388 388'); // margin so the N/E/S/W letters are not clipped
+function drawChart(res, target = svg) {
+  target.replaceChildren();
+  target.setAttribute('viewBox', '-14 -14 388 388'); // margin so the N/E/S/W letters are not clipped
   const cx = 180, cy = 180, r0 = 46, r1 = 160;
   for (const run of res.runs) {
     const a0 = run.start - res.step / 2, a1 = (run.wrap ? run.end + 360 : run.end) + res.step / 2;
     const path = el('path', { d: wedgePath(cx, cy, r0, r1, a0, a1), fill: palette[run.id], class: 'wedge', 'data-run': run.i });
     path.appendChild(el('title', {}, `${names[run.id]} · ${bearingLabel(run)} · nearest ${fmtKm(run.km)}`));
-    path.addEventListener('pointerenter', () => highlightRun(run.i));
-    path.addEventListener('pointerleave', () => highlightRun(-1));
-    svg.appendChild(path);
+    if (target === svg) {
+      path.addEventListener('pointerenter', () => highlightRun(run.i));
+      path.addEventListener('pointerleave', () => highlightRun(-1));
+    }
+    target.appendChild(path);
   }
-  svg.appendChild(el('circle', { cx, cy, r: r1, class: 'ring' }));
-  svg.appendChild(el('circle', { cx, cy, r: r0, class: 'ring' }));
+  target.appendChild(el('circle', { cx, cy, r: r1, class: 'ring' }));
+  target.appendChild(el('circle', { cx, cy, r: r0, class: 'ring' }));
   for (let a = 0; a < 360; a += 30) {
     const s = Math.sin(a * DEG), c = Math.cos(a * DEG);
-    svg.appendChild(el('line', { x1: cx + (r1 + 3) * s, y1: cy - (r1 + 3) * c, x2: cx + (r1 + 9) * s, y2: cy - (r1 + 9) * c, class: 'tick' }));
+    target.appendChild(el('line', { x1: cx + (r1 + 3) * s, y1: cy - (r1 + 3) * c, x2: cx + (r1 + 9) * s, y2: cy - (r1 + 9) * c, class: 'tick' }));
   }
   for (const [a, t] of [[0, 'N'], [90, 'E'], [180, 'S'], [270, 'W']]) {
-    svg.appendChild(el('text', { x: cx + (r1 + 17) * Math.sin(a * DEG), y: cy - (r1 + 17) * Math.cos(a * DEG) + 4, class: 'tick-label' }, t));
+    target.appendChild(el('text', { x: cx + (r1 + 17) * Math.sin(a * DEG), y: cy - (r1 + 17) * Math.cos(a * DEG) + 4, class: 'tick-label' }, t));
   }
-  svg.appendChild(el('circle', { cx, cy, r: 5, class: 'you' }));
+  target.appendChild(el('circle', { cx, cy, r: 5, class: 'you' }));
 }
 
 function drawLegend(res) {
@@ -1316,4 +1319,153 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
 }
 
 // Read-only test hook.
-window.__ATW = { controls, snapToShore, cellCentre, setMode, requestGps, analyze, pick, names, landAt, texW: TEX_W, cam: () => camera.position, borders: () => borders, globe, tex: () => texture.image, aniso: maxAniso, mipmaps: texture.generateMipmaps, compass: { open: openCompass, close: closeCompass, state: () => ({ heading: compass.heading, country: compass.countryEl.textContent, note: compass.noteEl.textContent, hidden: compass.el.hidden, noarrow: compass.dial.classList.contains('noarrow') }) }, capable: { hasGeo, directionCapable }, labels: () => labels.filter((l) => !l.el.hidden).map((l) => l.el.textContent), showGps, highlightRun };
+
+
+// ---------------------------------------------------------------- daily puzzle
+// One mystery shore per UTC day, the same for everyone: the day number seeds a PRNG and the
+// first candidate whose Coast view shows enough countries is the answer. Deterministic because
+// the analysis raster and sampling are identical on every device. Guess by clicking the globe;
+// each guess answers with distance and direction, Worldle-style.
+const puzzle = {
+  el: $('#puzzle'), chart: $('#puzzleChart'), guessesEl: $('#puzzleGuesses'), statusEl: $('#puzzleStatus'),
+  shareBtn: $('#puzzleShare'), revealBtn: $('#puzzleReveal'), titleEl: $('#puzzleTitle'),
+  active: false, num: 0, answer: null, guesses: [], done: false, won: false,
+};
+const PUZZLE_EPOCH = Date.UTC(2026, 7, 31);                // puzzle #1 = 31 August 2026
+const GUESS_LIMIT = 6, WIN_KM = 100, HALF_EARTH = 20015;
+const guessDots = new THREE.Group();
+scene.add(guessDots);
+guessDots.visible = false;
+
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+function dailyAnswer(num) {
+  const rnd = mulberry32(0x9E3779B9 ^ num);
+  const saved = MODE;
+  try {
+    MODE = 'coast';
+    for (let i = 0; i < 500; i++) {
+      const lat = Math.asin(rnd() * 2 - 1) / DEG, lon = rnd() * 360 - 180;
+      if (Math.abs(lat) > 66) continue;                    // skip the polar wastes
+      const p = snapToShore(lat, lon);
+      if (p === null) continue;
+      const at = cellCentre(p);
+      const res = analyze(at.lat, at.lon);
+      if (!res) continue;
+      const ids = new Set(res.runs.map((r) => r.id));
+      if (ids.size < 4) continue;                          // enough countries to reason from
+      return { at: res.at, res };
+    }
+  } finally { MODE = saved; }
+  return null;
+}
+
+function initialBearing(a, b) {
+  const p1 = a.lat * DEG, p2 = b.lat * DEG, dl = (b.lon - a.lon) * DEG;
+  const y = Math.sin(dl) * Math.cos(p2);
+  const x = Math.cos(p1) * Math.sin(p2) - Math.sin(p1) * Math.cos(p2) * Math.cos(dl);
+  return (Math.atan2(y, x) / DEG + 360) % 360;
+}
+const ARROWS = ['↑', '↗', '→', '↘', '↓', '↙', '←', '↖']; // text arrows: emoji ones render oddly outside chat apps
+const arrowFor = (b) => ARROWS[Math.round(b / 45) % 8];
+function squaresFor(km, won) {
+  if (won) return '🟩🟩🟩🟩🟩';
+  const green = Math.max(0, Math.min(4, Math.floor((1 - km / HALF_EARTH) * 5)));
+  return '🟩'.repeat(green) + '🟨' + '⬛'.repeat(4 - green);
+}
+
+function savePuzzle() {
+  try { localStorage.setItem('nl-daily-v1', JSON.stringify({ num: puzzle.num, guesses: puzzle.guesses.map((g) => [g.lat, g.lon]) })); } catch (e) { /* ignore */ }
+}
+
+function addGuessDot(lat, lon) {
+  const dot = new THREE.Mesh(new THREE.SphereGeometry(0.01, 12, 8), new THREE.MeshBasicMaterial({ color: 0xef4444 }));
+  dot.position.copy(toVec(lat, lon, 1.006));
+  guessDots.add(dot);
+}
+
+function puzzleGuess(lat, lon) {
+  if (puzzle.done || !puzzle.answer) return;
+  const km = distKm({ lat, lon }, puzzle.answer.at);
+  const g = { lat, lon, km, bearing: initialBearing({ lat, lon }, puzzle.answer.at) };
+  puzzle.guesses.push(g);
+  addGuessDot(lat, lon);
+  if (km <= WIN_KM) { puzzle.done = true; puzzle.won = true; }
+  else if (puzzle.guesses.length >= GUESS_LIMIT) puzzle.done = true;
+  savePuzzle();
+  renderPuzzle();
+}
+
+function renderPuzzle() {
+  puzzle.titleEl.textContent = `Where on Earth? - daily #${puzzle.num}`;
+  puzzle.guessesEl.replaceChildren();
+  for (const [i, g] of puzzle.guesses.entries()) {
+    const li = document.createElement('li');
+    const won = g.km <= WIN_KM;
+    const sq = document.createElement('span'); sq.className = 'sq'; sq.textContent = squaresFor(g.km, won);
+    const txt = document.createElement('span');
+    txt.textContent = won ? `${i + 1}. ${fmtKm(g.km)} - found it!` : `${i + 1}. ${fmtKm(g.km)} ${arrowFor(g.bearing)}`;
+    li.append(sq, txt);
+    puzzle.guessesEl.appendChild(li);
+  }
+  const left = GUESS_LIMIT - puzzle.guesses.length;
+  puzzle.statusEl.textContent = puzzle.done
+    ? (puzzle.won ? `Got it in ${puzzle.guesses.length} - new puzzle at midnight UTC.` : 'Out of guesses - reveal below, new puzzle at midnight UTC.')
+    : (puzzle.guesses.length ? `${left} ${left === 1 ? 'guess' : 'guesses'} left. The arrow points from your guess towards the answer.` : '');
+  puzzle.shareBtn.hidden = puzzle.revealBtn.hidden = !puzzle.done;
+}
+
+function openPuzzle() {
+  const num = Math.floor((Date.now() - PUZZLE_EPOCH) / 86400000) + 1;
+  if (puzzle.num !== num) {
+    puzzle.num = num;
+    puzzle.answer = dailyAnswer(num);
+    puzzle.guesses = []; puzzle.done = false; puzzle.won = false;
+    guessDots.clear();
+    if (!puzzle.answer) return;                           // should never happen
+    drawChart(puzzle.answer.res, puzzle.chart);
+    try {                                                  // restore today's earlier guesses
+      const st = JSON.parse(localStorage.getItem('nl-daily-v1') || 'null');
+      if (st && st.num === num) for (const [lat, lon] of st.guesses.slice(0, GUESS_LIMIT)) puzzleGuess(lat, lon);
+    } catch (e) { /* ignore */ }
+  }
+  clearPick();
+  renderPuzzle();
+  puzzle.active = true;
+  puzzle.el.hidden = false;
+  guessDots.visible = true;
+  document.body.classList.add('puzzle-open');
+}
+function closePuzzle() {
+  puzzle.active = false;
+  puzzle.el.hidden = true;
+  guessDots.visible = false;
+  document.body.classList.remove('puzzle-open');
+}
+$('#daily').addEventListener('click', openPuzzle);
+$('#puzzleClose').addEventListener('click', closePuzzle);
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && puzzle.active) closePuzzle(); });
+puzzle.revealBtn.addEventListener('click', () => {
+  closePuzzle();
+  setMode('coast');
+  pick(puzzle.answer.at.lat, puzzle.answer.at.lon);
+  flyTo(puzzle.answer.at.lat, puzzle.answer.at.lon);
+});
+puzzle.shareBtn.addEventListener('click', async () => {
+  const rows = puzzle.guesses.map((g) => `${squaresFor(g.km, g.km <= WIN_KM)} ${fmtKm(g.km)}${g.km <= WIN_KM ? '' : ' ' + arrowFor(g.bearing)}`);
+  const text = `🌍 nearest.land daily #${puzzle.num} - ${puzzle.won ? puzzle.guesses.length : 'X'}/${GUESS_LIMIT}
+${rows.join('\n')}
+Guess the shore from what is across its water:
+https://nearest.land/`;
+  if (navigator.share) { try { await navigator.share({ text }); return; } catch (e) { if (e.name === 'AbortError') return; } }
+  try { await navigator.clipboard.writeText(text); puzzle.shareBtn.textContent = 'Copied!'; setTimeout(() => { puzzle.shareBtn.textContent = 'Share result'; }, 1500); } catch (e) { /* ignore */ }
+});
+
+window.__ATW = { puzzle: { open: openPuzzle, close: closePuzzle, guess: puzzleGuess, state: () => ({ num: puzzle.num, guesses: puzzle.guesses.map((g) => ({ km: Math.round(g.km) })), done: puzzle.done, won: puzzle.won, answer: puzzle.answer && puzzle.answer.at }) }, controls, snapToShore, cellCentre, setMode, requestGps, analyze, pick, names, landAt, texW: TEX_W, cam: () => camera.position, borders: () => borders, globe, tex: () => texture.image, aniso: maxAniso, mipmaps: texture.generateMipmaps, compass: { open: openCompass, close: closeCompass, state: () => ({ heading: compass.heading, country: compass.countryEl.textContent, note: compass.noteEl.textContent, hidden: compass.el.hidden, noarrow: compass.dial.classList.contains('noarrow') }) }, capable: { hasGeo, directionCapable }, labels: () => labels.filter((l) => !l.el.hidden).map((l) => l.el.textContent), showGps, highlightRun };
