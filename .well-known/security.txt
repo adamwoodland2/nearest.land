@@ -1,4 +1,5 @@
 Contact: mailto:webmaster@nearest.land
 Canonical: https://nearest.land/.well-known/security.txt
+Canonical: https://www.nearest.land/.well-known/security.txt
 Expires: 2027-07-30T23:59:59.000Z
 Preferred-Languages: en
