@@ -699,10 +699,11 @@ async function refreshLayer() {
     layerStatus.textContent = '0%';
     const ok = await applyLayer((f) => { layerStatus.textContent = `${Math.round(f * 100)}%`; });
     layerStatus.textContent = '';
-    if (!ok && LAYER === 'terrain') setLayer('political'); // offline: fall back visibly
-    return;
+    if (!ok && LAYER === 'terrain') { setLayer('political'); return; } // offline: fall back visibly
+  } else {
+    applyLayer();
   }
-  applyLayer();
+  retintLines(); // path colours are layer-dependent
 }
 layerSel.value = LAYER;
 layerSel.addEventListener('change', () => setLayer(layerSel.value));
@@ -901,6 +902,22 @@ canvas.addEventListener('pointermove', (e) => {
 });
 canvas.addEventListener('pointerleave', () => { tip.hidden = true; highlightRun(-1); });
 
+// Path colour: the country's palette hue, but darkened and saturated over the pale
+// Natural Earth terrain, where the political-map pastels all but vanish.
+function lineColor(id) {
+  const col = new THREE.Color(palette[id]);
+  if (LAYER === 'terrain') {
+    const hsl = { h: 0, s: 0, l: 0 };
+    // In sRGB, not the linear working space - 0.3 linear lightness displays as ~0.58.
+    col.getHSL(hsl, THREE.SRGBColorSpace);
+    col.setHSL(hsl.h, Math.max(hsl.s, 0.75), Math.min(hsl.l, 0.3), THREE.SRGBColorSpace);
+  }
+  return col;
+}
+function retintLines() {
+  for (const line of linesGroup.children) line.material.color.copy(lineColor(line.userData.id));
+}
+
 function drawLines(res) {
   linesGroup.clear();
   for (const run of res.runs) {
@@ -918,7 +935,7 @@ function drawLines(res) {
         const q = destination(res.at.lat, res.at.lon, b, v.km * s / steps);
         pts.push(toVec(q.lat, q.lon, 1.006));
       }
-      const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: new THREE.Color(palette[v.id]), transparent: true, opacity: 0.85 }));
+      const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: lineColor(v.id), transparent: true, opacity: 0.85 }));
       line.userData = { id: v.id, bearing: b, km: v.km, run: run.i };
       linesGroup.add(line);
     }
