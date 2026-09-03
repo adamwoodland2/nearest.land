@@ -986,7 +986,9 @@ function drawChart(res, target = svg) {
   for (const run of res.runs) {
     const a0 = run.start - res.step / 2, a1 = (run.wrap ? run.end + 360 : run.end) + res.step / 2;
     const path = el('path', { d: wedgePath(cx, cy, r0, r1, a0, a1), fill: palette[run.id], class: 'wedge', 'data-run': run.i });
-    path.appendChild(el('title', {}, `${names[run.id]} · ${bearingLabel(run)} · nearest ${fmtKm(run.km)}`));
+    // The puzzle chart gets its tooltips from updatePuzzleTitles (progressive reveal);
+    // labelling every slice up front would give the answer away.
+    if (target === svg) path.appendChild(el('title', {}, `${names[run.id]} · ${bearingLabel(run)} · nearest ${fmtKm(run.km)}`));
     if (target === svg) {
       path.addEventListener('pointerenter', () => highlightRun(run.i));
       path.addEventListener('pointerleave', () => highlightRun(-1));
@@ -1446,8 +1448,33 @@ function puzzleGuess(lat, lon) {
   if (puzzle.active) setCollapsed(!puzzle.done && window.innerWidth <= 860);
 }
 
+// Chart tooltips as a hint ladder: the widest slice is named from the start, each wrong
+// guess names the next widest, and a finished game names them all. Everything else says "?".
+// Sort is stable and the runs are deterministic, so every device reveals in the same order.
+function updatePuzzleTitles() {
+  if (!puzzle.answer) return;
+  const runs = puzzle.answer.res.runs;
+  const wrong = puzzle.guesses.filter((g) => g.km > WIN_KM).length;
+  const shown = new Set([...runs].sort((a, b) => b.count - a.count)
+    .slice(0, puzzle.done ? runs.length : 1 + wrong).map((r) => r.i));
+  for (const w of puzzle.chart.querySelectorAll('.wedge')) {
+    const run = runs.find((r) => r.i === +w.dataset.run);
+    if (!run) continue;
+    const t = w.querySelector('title') || w.appendChild(el('title', {}));
+    t.textContent = shown.has(run.i) ? `${names[run.id]} · nearest ${fmtKm(run.km)}` : '?';
+  }
+}
+
+// The puzzle day shown as dd/mm (the internal day number still seeds the PRNG and keys
+// saved state; a "#4" on screen just advertised how new the site is).
+function puzzleDate() {
+  const d = new Date(PUZZLE_EPOCH + (puzzle.num - 1) * 86400000);
+  return `${String(d.getUTCDate()).padStart(2, '0')}/${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+
 function renderPuzzle() {
-  puzzle.titleEl.textContent = `Where on Earth? - daily #${puzzle.num}`;
+  updatePuzzleTitles();
+  puzzle.titleEl.textContent = `Where on Earth? - daily ${puzzleDate()}`;
   puzzle.guessesEl.replaceChildren();
   for (const [i, g] of puzzle.guesses.entries()) {
     const li = document.createElement('li');
@@ -1465,8 +1492,8 @@ function renderPuzzle() {
   puzzle.shareBtn.hidden = puzzle.revealBtn.hidden = !puzzle.done;
   const last = puzzle.guesses[puzzle.guesses.length - 1];
   puzzle.miniEl.textContent = puzzle.done
-    ? (puzzle.won ? `Daily #${puzzle.num} solved in ${puzzle.guesses.length}` : `Daily #${puzzle.num} - out of guesses`)
-    : (last ? `${fmtKm(last.km)} ${arrowFor(last.bearing)} · ${GUESS_LIMIT - puzzle.guesses.length} left` : `Daily #${puzzle.num} - tap the globe to guess`);
+    ? (puzzle.won ? `Daily ${puzzleDate()} solved in ${puzzle.guesses.length}` : `Daily ${puzzleDate()} - out of guesses`)
+    : (last ? `${fmtKm(last.km)} ${arrowFor(last.bearing)} · ${GUESS_LIMIT - puzzle.guesses.length} left` : `Daily ${puzzleDate()} - tap the globe to guess`);
 }
 function setCollapsed(on) {
   puzzle.boxEl.classList.toggle('collapsed', on);
@@ -1516,7 +1543,7 @@ puzzle.revealBtn.addEventListener('click', () => {
 });
 puzzle.shareBtn.addEventListener('click', async () => {
   const rows = puzzle.guesses.map((g) => `${squaresFor(g.km, g.km <= WIN_KM)} ${fmtKm(g.km)}${g.km <= WIN_KM ? '' : ' ' + arrowFor(g.bearing)}`);
-  const text = `🌍 nearest.land daily #${puzzle.num} - ${puzzle.won ? puzzle.guesses.length : 'X'}/${GUESS_LIMIT}
+  const text = `🌍 nearest.land daily ${puzzleDate()} - ${puzzle.won ? puzzle.guesses.length : 'X'} of ${GUESS_LIMIT}
 ${rows.join('\n')}
 Guess the shore from what is across its water:
 https://nearest.land/`;
