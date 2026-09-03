@@ -404,11 +404,15 @@ function homeCountry(p) {
 
 // ---------------------------------------------------------------- analysis
 
-// Bearing sampling step in degrees (1, 0.5 or 0.25). Finer steps catch narrower distant
-// targets at proportionally more compute.
-// Bearing sampling. Fixed at 0.25° (1,440 bearings): a pick still takes ~40 ms on a phone, so the
-// coarser 1°/0.5° options that used to be offered were dropped (2026-08-31).
-const STEP = 0.25;
+// Bearing sampling, selectable (2026-09-03): 0.25° (1,440 bearings, ~40 ms a pick on a phone)
+// or 0.1° (3,600 bearings, ~100 ms). Finer steps catch narrower distant targets at
+// proportionally more compute; below 0.1° the ~10 km index raster becomes the binding
+// constraint, not the sampling. Persisted as nl-step, carried in links as &step=. The Records
+// and the daily puzzle are pinned to 0.25° (see the jump handler / dailyAnswer).
+const STEPS = [0.25, 0.1];
+let STEP = 0.25;
+try { const s = parseFloat(localStorage.getItem('nl-step')); if (STEPS.includes(s)) STEP = s; } catch (e) { /* ignore */ }
+{ const s = parseFloat(new URLSearchParams(location.search).get('step')); if (STEPS.includes(s)) STEP = s; }
 // Mode: 'coast' snaps to the water's edge and walks to the first land (blank where land is in
 // view); 'any' starts from the exact point, on land or sea, and walks to the first land that is
 // not the country you are standing in.
@@ -681,7 +685,7 @@ const layerSel = $('#layer');
 let lastAt = null;
 function writeUrl() {
   if (!lastAt) return;
-  history.replaceState(null, '', `?at=${lastAt}${MODE !== 'coast' ? `&mode=${MODE}` : ''}${LAYER !== 'political' ? `&layer=${LAYER}` : ''}`);
+  history.replaceState(null, '', `?at=${lastAt}${MODE !== 'coast' ? `&mode=${MODE}` : ''}${STEP !== 0.25 ? `&step=${STEP}` : ''}${LAYER !== 'political' ? `&layer=${LAYER}` : ''}`);
 }
 const layerStatus = $('#layerStatus');
 function setLayer(layer) {
@@ -1102,6 +1106,7 @@ function pickFromUrl() {
   if (standalone) { if (location.search) history.replaceState(null, '', location.pathname); return false; }
   const q = new URLSearchParams(location.search);
   if (MODES.includes(q.get('mode'))) setMode(q.get('mode'));
+  { const s = parseFloat(q.get('step')); if (STEPS.includes(s)) setStep(s); }
   const m = /^(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)$/.exec(q.get('at') || '');
   if (!m) return false;
   const lat = parseFloat(m[1]), lon = parseFloat(m[2]);
@@ -1113,7 +1118,8 @@ function pickFromUrl() {
 
 $('#viewLink').addEventListener('click', shareView);
 
-// Option values are "lat,lon" or "lat,lon,mode": records carry the mode they were computed in.
+// Option values are "lat,lon", "lat,lon,mode" or "lat,lon,mode,step": records carry the mode
+// and sampling step they were computed in.
 const modeSel = $('#mode');
 modeSel.value = MODE;
 const compassModeSel = $('#compassMode');
@@ -1137,12 +1143,27 @@ modeSel.addEventListener('change', () => {
   if (lastPick) pick(lastPick.lat, lastPick.lon);
 });
 
+const stepSel = $('#step');
+stepSel.value = String(STEP);
+function setStep(step) {
+  if (!STEPS.includes(step)) return;
+  STEP = step;
+  stepSel.value = String(step);
+  try { localStorage.setItem('nl-step', String(step)); } catch (e) { /* ignore */ }
+}
+stepSel.addEventListener('change', () => {
+  setStep(parseFloat(stepSel.value));
+  if (lastPick) pick(lastPick.lat, lastPick.lon);
+});
+
 $('#jump').addEventListener('change', (e) => {
   const parts = e.target.value.split(',');
   const [lat, lon] = parts.map(parseFloat);
   if (Number.isNaN(lat) || Number.isNaN(lon)) return;
-  // Records force the mode they were computed in; the Classics are coast views, so they force Coast.
+  // Records force the mode and sampling step they were computed in, so their numbers
+  // reproduce; the Classics are coast views, so they force Coast but keep the user's step.
   setMode(MODES.includes(parts[2]) ? parts[2] : 'coast');
+  { const s = parseFloat(parts[3]); if (STEPS.includes(s)) setStep(s); }
   pick(lat, lon);
   flyTo(lat, lon);
 });
@@ -1366,9 +1387,11 @@ function mulberry32(a) {
 
 function dailyAnswer(num) {
   const rnd = mulberry32(0x9E3779B9 ^ num);
-  const saved = MODE;
+  // Pin mode AND step: the candidate gate below runs analyze(), so a user-selected 0.1 step
+  // would change which candidate first passes and hand different devices different answers.
+  const saved = MODE, savedStep = STEP;
   try {
-    MODE = 'coast';
+    MODE = 'coast'; STEP = 0.25;
     for (let i = 0; i < 500; i++) {
       const lat = Math.asin(rnd() * 2 - 1) / DEG, lon = rnd() * 360 - 180;
       if (Math.abs(lat) > 66) continue;                    // skip the polar wastes
@@ -1381,7 +1404,7 @@ function dailyAnswer(num) {
       if (ids.size < 4) continue;                          // enough countries to reason from
       return { at: res.at, res };
     }
-  } finally { MODE = saved; }
+  } finally { MODE = saved; STEP = savedStep; }
   return null;
 }
 

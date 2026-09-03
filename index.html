@@ -115,15 +115,15 @@
       <select id="jump" aria-label="Jump to a place">
         <option value="">Jump to a place…</option>
         <optgroup label="Sea records (Coast mode)">
-          <option value="21.753,-17.007,coast">Most countries in sea view - Dakhla, Western Sahara (55)</option>
-          <option value="24.741,67.104,coast">Longest sea voyage - Pakistan → Kamchatka, 32,042 km</option>
-          <option value="78.179,11.997,coast">Widest sea view - Svalbard, 340.75° of water</option>
-          <option value="-71.235,170.288,coast">Cape Adare, Antarctica - 330° of water</option>
-          <option value="64.116,-77.739,coast">Furthest by sea - Hudson Strait, Canada (Australia, 24,018 km)</option>
+          <option value="21.753,-17.007,coast,0.25">Most countries in sea view - Dakhla, Western Sahara (55)</option>
+          <option value="24.741,67.104,coast,0.25">Longest sea voyage - Pakistan → Kamchatka, 32,042 km</option>
+          <option value="78.179,11.997,coast,0.25">Widest sea view - Svalbard, 340.75° of water</option>
+          <option value="-71.235,170.288,coast,0.25">Cape Adare, Antarctica - 330° of water</option>
+          <option value="64.116,-77.739,coast,0.25">Furthest by sea - Hudson Strait, Canada (Australia, 24,018 km)</option>
         </optgroup>
         <optgroup label="Land records">
-          <option value="-7.3,-34.85,any">Most countries from land - near João Pessoa, Brazil (70)</option>
-          <option value="32.4,97.4,land">Most countries over land only - Yushu, China (18)</option>
+          <option value="-7.3,-34.85,any,0.25">Most countries from land - near João Pessoa, Brazil (70)</option>
+          <option value="32.4,97.4,land,0.25">Most countries over land only - Yushu, China (18)</option>
         </optgroup>
         <optgroup label="Classics">
           <option value="10.854,-61.04">Trinidad, east coast</option>
@@ -157,6 +157,12 @@
           <option value="land">Over land</option>
         </select>
       </label>
+      <label class="step-ctl">Detail
+        <select id="step" aria-label="Bearing sampling step">
+          <option value="0.25">0.25°</option>
+          <option value="0.1">0.1°</option>
+        </select>
+      </label>
       <label class="step-ctl">Map
         <select id="layer" aria-label="Globe layer">
           <option value="political">Political</option>
@@ -167,7 +173,7 @@
     </p>
     <ol class="legend" id="legend"></ol>
     <p class="note"><strong>Three modes.</strong> <em>Coast</em> snaps your pick to the water's edge and follows each direction across the sea to its first landfall; land within about 20 km in a direction counts as "land in view" and is left blank. <em>Anywhere</em> starts from the exact point you tapped, on land or at sea, and follows each direction to the first land that is not the country you are standing in - so from Berlin, east is Poland at 80 km. <em>Over land</em> does the same but never crosses water: a direction that reaches the sea first is left blank.</p>
-    <p class="note"><strong>Not 100% accurate, by nature.</strong> The analysis grid is roughly 10 km, and that cuts both ways. Islands smaller than a grid cell are kept deliberately as a single cell so they still count (Tristan da Cunha, Bermuda, the Maldives) - but that draws them as a square, and an island closer than about 10 km to a coast merges with it, so in Over land mode Kinmen reads as joined to mainland China and Taiwan appears reachable over land. In the other direction, straits and inlets narrower than about 10 km can vanish, and the exact point you "stand" on is snapped to the grid. Directions are sampled every quarter of a degree, which spreads to about 22 km at 5,000 km and 65 km at 15,000 km - so a distant island narrower than that can slip between two bearings.</p>
+    <p class="note"><strong>Not 100% accurate, by nature.</strong> The analysis grid is roughly 10 km, and that cuts both ways. Islands smaller than a grid cell are kept deliberately as a single cell so they still count (Tristan da Cunha, Bermuda, the Maldives) - but that draws them as a square, and an island closer than about 10 km to a coast merges with it, so in Over land mode Kinmen reads as joined to mainland China and Taiwan appears reachable over land. In the other direction, straits and inlets narrower than about 10 km can vanish, and the exact point you "stand" on is snapped to the grid. Directions are sampled every quarter of a degree - a spread of about 22 km at 5,000 km and 65 km at 15,000 km, so a distant island narrower than that can slip between two bearings. The Detail selector's 0.1° setting narrows that to about 9 km and 26 km, at roughly 2.5&times; the compute per pick.</p>
     <p class="note">There is also no such thing as <em>the</em> coastline. This is the <a href="https://en.wikipedia.org/wiki/Coastline_paradox" target="_blank" rel="noopener">coastline paradox</a>: the finer you measure a coast, the longer it gets, without limit - every bay contains smaller bays. So any answer depends on the map's level of detail. Here it is Natural Earth's 1:10m outlines (public domain), which is generous for a globe and coarse for a beach.</p>
     <p class="note contact">Free, open source (MIT), nothing tracked. Questions or corrections: <a href="mailto:adam@nearest.land">adam@nearest.land</a></p>
     <p class="note">Like this? Also see <a href="https://orrery.live/">orrery.live</a> for a 3D tour of the solar system.</p>
