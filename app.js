@@ -627,25 +627,27 @@ const globe = new THREE.Mesh(new THREE.SphereGeometry(1, 128, 96), new THREE.Mes
 
 // ------------------------------------------------------------------ display layers
 // 'political' is the generated per-country texture above; 'terrain' is Natural Earth I
-// (1:50m, public domain) pre-resized to data/ne1-8192.jpg / ne1-4096.jpg. Cosmetic only:
-// the analysis raster, borders, labels and paths are unaffected. Fetched on first use;
-// the service worker then keeps it cache-first like other images.
-const LAYERS = ['political', 'terrain'];
+// (public domain) and 'satellite' NASA Blue Marble Next Generation (Aug 2004, topography +
+// bathymetry, public domain), each pre-resized to data/<ne1|bm>-16384/8192/4096.jpg.
+// Cosmetic only: the analysis raster, borders, labels and paths are unaffected. Fetched on
+// first use; the service worker then keeps them cache-first like other images.
+const LAYERS = ['political', 'terrain', 'satellite'];
 let LAYER = 'political';
 try { const l = localStorage.getItem('nl-layer'); if (LAYERS.includes(l)) LAYER = l; } catch (e) { /* ignore */ }
-let terrainTex = null, terrainPromise = null;
-// 16384 (11 MB, ~2.4 km/px) only where the GPU and memory clearly allow it; the political
+// 16384 (~11 MB, ~2.4 km/px) only where the GPU and memory clearly allow it; the political
 // canvas texture stays at TEX_W regardless.
-const TERRAIN_URL = `data/ne1-${TEX_W >= 8192
+const LAYER_SIZE = TEX_W >= 8192
   ? (renderer.capabilities.maxTextureSize >= 16384 && (navigator.deviceMemory === undefined || navigator.deviceMemory >= 8) && !lowMem ? 16384 : 8192)
-  : 4096}.jpg`;
+  : 4096;
+const LAYER_URLS = { terrain: `data/ne1-${LAYER_SIZE}.jpg`, satellite: `data/bm-${LAYER_SIZE}.jpg` };
+const layerTex = {}, layerLoading = {};
 // Byte-counted download (so the loading bar can track it), abortable via `signal`.
-// Memoised: concurrent callers share one download; a failure or abort clears it for retry.
-function ensureTerrain(onPct, signal) {
-  if (terrainTex) return Promise.resolve();
-  if (!terrainPromise) {
-    terrainPromise = (async () => {
-      const resp = await fetch(TERRAIN_URL, { signal });
+// Memoised per layer: concurrent callers share one download; a failure or abort clears it.
+function ensureLayerTex(layer, onPct, signal) {
+  if (layerTex[layer]) return Promise.resolve();
+  if (!layerLoading[layer]) {
+    layerLoading[layer] = (async () => {
+      const resp = await fetch(LAYER_URLS[layer], { signal });
       const total = Number(resp.headers.get('content-length')) || 11e6;
       const reader = resp.body.getReader();
       const chunks = []; let got = 0;
@@ -659,25 +661,32 @@ function ensureTerrain(onPct, signal) {
       // img-src 'self' data: blocks blob: loads, but bitmap decoding is not a resource load.
       // flipY is baked in at decode (three.js ignores .flipY for ImageBitmaps).
       const bitmap = await createImageBitmap(new Blob(chunks, { type: 'image/jpeg' }), { imageOrientation: 'flipY' });
-      terrainTex = new THREE.Texture(bitmap);
-      terrainTex.flipY = false;
-      terrainTex.colorSpace = THREE.SRGBColorSpace;
-      terrainTex.anisotropy = maxAniso;
-      terrainTex.generateMipmaps = texture.generateMipmaps;
-      terrainTex.minFilter = texture.minFilter;
-      terrainTex.needsUpdate = true;
-    })().catch((e) => { terrainPromise = null; throw e; });
+      const tex = new THREE.Texture(bitmap);
+      tex.flipY = false;
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.anisotropy = maxAniso;
+      tex.generateMipmaps = texture.generateMipmaps;
+      tex.minFilter = texture.minFilter;
+      tex.needsUpdate = true;
+      layerTex[layer] = tex;
+    })().catch((e) => { layerLoading[layer] = null; throw e; });
   }
-  return terrainPromise;
+  return layerLoading[layer];
 }
 async function applyLayer(onPct, signal) {
+  const want = LAYER;
   let map = texture;
-  if (LAYER === 'terrain') {
-    try { await ensureTerrain(onPct, signal); } catch (e) { return false; } // offline or aborted: stay political
-    if (LAYER !== 'terrain') return true; // switched back while downloading
-    map = terrainTex;
+  if (want !== 'political') {
+    try { await ensureLayerTex(want, onPct, signal); } catch (e) { return false; } // offline or aborted: stay political
+    if (LAYER !== want) return true; // switched again while downloading
+    map = layerTex[want];
   }
   if (globe.material.map !== map) { globe.material.map = map; globe.material.needsUpdate = true; }
+  // Dark coastlines/borders vanish on the dark Blue Marble imagery - lighten them there.
+  if (borders) {
+    borders.material.color.set(want === 'satellite' ? 0xcfd9e4 : 0x0a0f1a);
+    borders.material.opacity = want === 'satellite' ? 0.4 : 0.55;
+  }
   return true;
 }
 const layerSel = $('#layer');
@@ -699,11 +708,12 @@ function setLayer(layer) {
 // Runtime layer switch: show download progress beside the selector while the terrain image
 // arrives (the first switch costs a few seconds; after that it is cached and instant).
 async function refreshLayer() {
-  if (LAYER === 'terrain' && !terrainTex) {
+  if (LAYER !== 'political' && !layerTex[LAYER]) {
+    const want = LAYER;
     layerStatus.textContent = '0%';
     const ok = await applyLayer((f) => { layerStatus.textContent = `${Math.round(f * 100)}%`; });
     layerStatus.textContent = '';
-    if (!ok && LAYER === 'terrain') { setLayer('political'); return; } // offline: fall back visibly
+    if (!ok && LAYER === want) { setLayer('political'); return; } // offline: fall back visibly
   } else {
     applyLayer();
   }
@@ -896,7 +906,7 @@ canvas.addEventListener('pointermove', (e) => {
   const u = hit.object.userData;
   tip.replaceChildren();
   const c = document.createElement('span'); c.className = 'tip-country'; c.textContent = names[u.id];
-  const m = document.createElement('span'); m.className = 'tip-meta'; m.textContent = ` · ${u.bearing}° · ${fmtKm(u.km)}`;
+  const m = document.createElement('span'); m.className = 'tip-meta'; m.textContent = ` · ${fmtDeg(u.bearing)} · ${fmtKm(u.km)}`;
   tip.append(c, m);
   const rect = canvas.getBoundingClientRect();
   tip.style.left = `${e.clientX - rect.left}px`;
@@ -1338,12 +1348,12 @@ if (navigator.permissions && navigator.permissions.query) {
   navigator.permissions.query({ name: 'geolocation' }).then((p) => { if (p.state === 'granted') requestGps(false); }).catch(() => {});
 }
 
-if (LAYER === 'terrain') {
+if (LAYER !== 'political') {
   const skip = $('#skipTerrain');
   const ac = new AbortController();
   skip.hidden = false;
   skip.addEventListener('click', () => { skip.disabled = true; ac.abort(); }, { once: true });
-  await progress(90, 'Downloading the terrain map…');
+  await progress(90, `Downloading the ${LAYER} map…`);
   const ok = await applyLayer((f) => { bar.style.width = `${90 + 9 * f}%`; }, ac.signal);
   if (!ok) setLayer('political');   // skipped or offline: political, and remembered
   skip.hidden = true;

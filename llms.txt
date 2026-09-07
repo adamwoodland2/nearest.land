@@ -7,6 +7,7 @@ nearest.land answers "what's across the sea from here?" properly: not due east o
 Method: Natural Earth 1:10m country polygons (public domain) are rasterised in the browser to a ~10 km grid; the chosen point is snapped to the water's edge; each bearing is walked along its great circle until the first land cell, continuing past the antipode if needed. Land within about 20 km counts as "land in view". Bearings are sampled every 0.25° (1,440 bearings), so a distant island narrower than about 1/230 of its distance (22 km at 5,000 km) can fall between bearings. Results are inherently approximate (see the coastline paradox: the finer a coast is measured, the longer it gets).
 
 Daily puzzle: one mystery shore per UTC day (same for everyone, seeded from the date); guess it from its view in six tries, share an emoji result.
+Map layers: Political (per-country colours), Terrain (Natural Earth I shaded relief) and Satellite (NASA Blue Marble imagery) - cosmetic only, the analysis is identical on all three.
 Three modes: Coast (default) snaps the pick to the water's edge and follows each direction across the sea to its first landfall; Anywhere starts from the exact point, on land or at sea, and follows each direction to the first land that is not the country you are standing in (from Berlin, east is Poland at about 80 km); Over land is the same but never crosses water.
 
 Technical: static site, three.js, MIT licensed, installable PWA that works offline once loaded. No tracking scripts, no backend.

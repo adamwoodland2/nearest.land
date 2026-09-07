@@ -4,7 +4,7 @@
 //    dataset and three.js are precached so the whole globe works offline once loaded.
 //  - Images: CACHE-FIRST.
 //  - Bump CACHE on deploys that change any precached file.
-const CACHE = 'nl-v39';
+const CACHE = 'nl-v40';
 const CORE = [
 	'/',
 	'/index.html',
@@ -34,7 +34,9 @@ self.addEventListener('fetch', (e) => {
 	const req = e.request;
 	if (req.method !== 'GET' || new URL(req.url).origin !== location.origin) return;
 
-	if (req.destination === 'image') {
+	// The map-layer pyramids are fetch()ed from JS (destination ""), but they are immutable
+	// images - treat them cache-first like everything else pictorial.
+	if (req.destination === 'image' || /\/data\/(ne1|bm)-\d+\.jpg$/.test(new URL(req.url).pathname)) {
 		e.respondWith(
 			caches.open(CACHE).then(async (c) => {
 				const hit = await c.match(req);
