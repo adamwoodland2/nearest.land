@@ -24,8 +24,26 @@ async function progress(pct, msg) {
   if (msg) loadmsg.textContent = msg;
   await new Promise((r) => setTimeout(r, 0));
 }
+// If anything fatal happens before the loading overlay is gone (network failure, no WebGL,
+// an old browser), say so instead of spinning forever.
+function loadFailed() {
+  const overlay = $('#loading');
+  if (!overlay || overlay.hidden) return;
+  loadmsg.textContent = 'Loading failed - a network problem, or this browser cannot run the globe (WebGL needed).';
+  if (!overlay.querySelector('.retry')) {
+    const b = document.createElement('button');
+    b.className = 'retry';
+    b.textContent = 'Try again';
+    b.addEventListener('click', () => location.reload());
+    loadmsg.after(b);
+  }
+}
+window.addEventListener('error', loadFailed);
+window.addEventListener('unhandledrejection', loadFailed);
+
 async function fetchWithProgress(url, from, to) {
   const resp = await fetch(url);
+  if (!resp.ok) throw new Error(`${url}: HTTP ${resp.status}`);
   const total = Number(resp.headers.get('content-length')) || 3.7e6;
   const reader = resp.body.getReader();
   const chunks = []; let got = 0;
@@ -721,7 +739,18 @@ async function refreshLayer() {
 }
 layerSel.value = LAYER;
 layerSel.addEventListener('change', () => setLayer(layerSel.value));
-{ const l = new URLSearchParams(location.search).get('layer'); if (LAYERS.includes(l)) { LAYER = l; layerSel.value = l; } }
+// A shared link fully determines the view: with ?at= present, a missing &layer= means the
+// political default, not this device's saved preference. (Standalone launches ignore the
+// URL entirely - pickFromUrl strips it - so leave their saved layer alone.)
+{
+  const q = new URLSearchParams(location.search);
+  const standaloneLaunch = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  if (!standaloneLaunch) {
+    const l = q.get('layer');
+    if (LAYERS.includes(l)) { LAYER = l; layerSel.value = l; }
+    else if (q.has('at')) { LAYER = 'political'; layerSel.value = 'political'; }
+  }
+}
 // When terrain is the saved layer, its download is folded into the initial loading bar (with a
 // skip button) at the end of startup, so the political colours never flash first.
 scene.add(globe);
@@ -770,6 +799,11 @@ antiMarker.visible = false;
 scene.add(antiMarker);
 const linesGroup = new THREE.Group();
 scene.add(linesGroup);
+// Daily-puzzle guess dots live here (not in the puzzle section) because frame() scales them
+// and starts running during the module's top-level awaits, long before the puzzle code runs.
+const guessDots = new THREE.Group();
+scene.add(guessDots);
+guessDots.visible = false;
 
 // Country labels: one absolutely-positioned div each, projected every frame and decluttered.
 const labelsBox = $('#labels');
@@ -796,13 +830,15 @@ const tmp = new THREE.Vector3();
 function updateLabels() {
   const w = canvas.clientWidth, h = canvas.clientHeight;
   const dist = camera.position.length();
-  const camDir = camera.position.clone().normalize();
   // Bigger countries appear first; smaller ones only as you zoom in.
   const minArea = 110 * Math.pow(Math.max(0, dist - 1.15) / 4.85, 1.5);
   const placed = [];
   for (const i of labelOrder) {
     const L = labels[i];
-    let show = L.area >= minArea && L.v.dot(camDir) > 0.12;
+    // True horizon test: a surface point (unit vector) is visible iff v·cam > 1; the small
+    // margin hides labels right on the limb. The old fixed 0.12 threshold let labels show
+    // through the globe when zoomed in.
+    let show = L.area >= minArea && L.v.dot(camera.position) > 1.02;
     let x = 0, y = 0;
     if (show) {
       tmp.copy(L.v).project(camera);
@@ -830,6 +866,7 @@ function frame() {
   marker.scale.setScalar(s);
   antiMarker.scale.setScalar(s);
   gpsDot.scale.setScalar(s);
+  for (const d of guessDots.children) d.scale.setScalar(s);   // puzzle guess dots scale like the marker
   // Drag rotation slows down as you zoom in, so the globe moves under the cursor at the same pace.
   controls.rotateSpeed = Math.min(0.6, Math.max(0.03, 0.6 * (camera.position.length() - 1) / 1.9));
   gpsRing.scale.setScalar(s);
@@ -844,12 +881,25 @@ const raycaster = new THREE.Raycaster();
 raycaster.params.Line.threshold = 0.012;
 const tip = $('#tip');
 let down = null;
+let activePointers = 0, multiTouch = false;   // a pinch must never read as a tap
 function ndcOf(e) {
   const rect = canvas.getBoundingClientRect();
   return new THREE.Vector2((e.clientX - rect.left) / rect.width * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
 }
-canvas.addEventListener('pointerdown', (e) => { down = e.button === 0 ? [e.clientX, e.clientY] : null; });
+canvas.addEventListener('pointerdown', (e) => {
+  activePointers++;
+  if (activePointers > 1) { multiTouch = true; down = null; return; }
+  multiTouch = false;
+  down = e.button === 0 ? [e.clientX, e.clientY] : null;
+});
+canvas.addEventListener('pointercancel', () => {
+  activePointers = Math.max(0, activePointers - 1);
+  if (activePointers === 0) multiTouch = false;
+  down = null;
+});
 canvas.addEventListener('pointerup', (e) => {
+  activePointers = Math.max(0, activePointers - 1);
+  if (multiTouch) { if (activePointers === 0) multiTouch = false; down = null; return; }
   if (!down || e.button !== 0) { down = null; return; }
   const moved = Math.hypot(e.clientX - down[0], e.clientY - down[1]);
   down = null;
@@ -900,8 +950,9 @@ canvas.addEventListener('pointermove', (e) => {
   if (down || !linesGroup.children.length) { tip.hidden = true; return; }
   raycaster.setFromCamera(ndcOf(e), camera);
   const hits = raycaster.intersectObjects(linesGroup.children, false);
-  // Only accept a hit on the near side of the globe.
-  const hit = hits.find((h) => h.point.length() > 0.999 && h.point.dot(camera.position) > 0);
+  // Only accept a hit on the near side of the horizon (p·cam > r² for a point at radius r;
+  // the paths sit at 1.006, so 1.01 with a whisker of margin).
+  const hit = hits.find((h) => h.point.length() > 0.999 && h.point.dot(camera.position) > 1.01);
   if (!hit) { tip.hidden = true; highlightRun(-1); return; }
   const u = hit.object.userData;
   tip.replaceChildren();
@@ -995,13 +1046,29 @@ function drawChart(res, target = svg) {
   const cx = 180, cy = 180, r0 = 46, r1 = 160;
   for (const run of res.runs) {
     const a0 = run.start - res.step / 2, a1 = (run.wrap ? run.end + 360 : run.end) + res.step / 2;
-    const path = el('path', { d: wedgePath(cx, cy, r0, r1, a0, a1), fill: palette[run.id], class: 'wedge', 'data-run': run.i });
+    // A single run covering the full circle would give the arc identical endpoints, which SVG
+    // renders as nothing (e.g. Over land from Lesotho: 360° of South Africa) - draw a donut.
+    const d = a1 - a0 >= 359.999
+      ? `M${cx} ${cy - r1} A${r1} ${r1} 0 1 1 ${cx} ${cy + r1} A${r1} ${r1} 0 1 1 ${cx} ${cy - r1} Z `
+        + `M${cx} ${cy - r0} A${r0} ${r0} 0 1 0 ${cx} ${cy + r0} A${r0} ${r0} 0 1 0 ${cx} ${cy - r0} Z`
+      : wedgePath(cx, cy, r0, r1, a0, a1);
+    const path = el('path', { d, 'fill-rule': 'evenodd', fill: palette[run.id], class: 'wedge', 'data-run': run.i });
     // The puzzle chart gets its tooltips from updatePuzzleTitles (progressive reveal);
     // labelling every slice up front would give the answer away.
     if (target === svg) path.appendChild(el('title', {}, `${names[run.id]} · ${bearingLabel(run)} · nearest ${fmtKm(run.km)}`));
     if (target === svg) {
       path.addEventListener('pointerenter', () => highlightRun(run.i));
       path.addEventListener('pointerleave', () => highlightRun(-1));
+    } else {
+      // The puzzle card promises "hover or tap": surface the wedge's current tooltip text
+      // (which follows the progressive reveal) in a line under the chart, so touch works too.
+      const show = () => {
+        const t = path.querySelector('title');
+        const w = $('#puzzleWedge');
+        if (w) w.textContent = !t || t.textContent === '?' ? 'This sector is not revealed yet.' : t.textContent;
+      };
+      path.addEventListener('pointerenter', show);
+      path.addEventListener('pointerdown', show);
     }
     target.appendChild(path);
   }
@@ -1117,9 +1184,15 @@ function pickFromUrl() {
   const standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
   if (standalone) { if (location.search) history.replaceState(null, '', location.pathname); return false; }
   const q = new URLSearchParams(location.search);
-  if (MODES.includes(q.get('mode'))) setMode(q.get('mode'));
-  { const s = parseFloat(q.get('step')); if (STEPS.includes(s)) setStep(s); }
+  const urlMode = MODES.includes(q.get('mode')) ? q.get('mode') : null;
+  const sv = parseFloat(q.get('step'));
+  const urlStep = STEPS.includes(sv) ? sv : null;
   const m = /^(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)$/.exec(q.get('at') || '');
+  // A shared view is deterministic: with ?at= present, missing mode/step mean the defaults,
+  // not this device's saved preferences - and none of it is persisted, so opening someone
+  // else's link never rewrites your own settings.
+  if (m) { applyMode(urlMode || 'coast'); applyStep(urlStep || 0.25); }
+  else { if (urlMode) applyMode(urlMode); if (urlStep) applyStep(urlStep); }
   if (!m) return false;
   const lat = parseFloat(m[1]), lon = parseFloat(m[2]);
   if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return false;
@@ -1135,11 +1208,14 @@ $('#viewLink').addEventListener('click', shareView);
 const modeSel = $('#mode');
 modeSel.value = MODE;
 const compassModeSel = $('#compassMode');
-function setMode(mode) {
-  if (!MODES.includes(mode)) return;
+function applyMode(mode) {          // set without persisting (shared links, transient views)
   MODE = mode;
   modeSel.value = mode;
   compassModeSel.value = mode;
+}
+function setMode(mode) {
+  if (!MODES.includes(mode)) return;
+  applyMode(mode);
   try { localStorage.setItem('nl-mode', mode); } catch (e) { /* ignore */ }
 }
 // The mode selector inside Show Me: switch modes without leaving the compass. The globe view
@@ -1157,10 +1233,13 @@ modeSel.addEventListener('change', () => {
 
 const stepSel = $('#step');
 stepSel.value = String(STEP);
-function setStep(step) {
-  if (!STEPS.includes(step)) return;
+function applyStep(step) {          // set without persisting
   STEP = step;
   stepSel.value = String(step);
+}
+function setStep(step) {
+  if (!STEPS.includes(step)) return;
+  applyStep(step);
   try { localStorage.setItem('nl-step', String(step)); } catch (e) { /* ignore */ }
 }
 stepSel.addEventListener('change', () => {
@@ -1384,9 +1463,6 @@ const puzzle = {
 };
 const PUZZLE_EPOCH = Date.UTC(2026, 7, 31);                // puzzle #1 = 31 August 2026
 const GUESS_LIMIT = 6, WIN_KM = 100, HALF_EARTH = 20015;
-const guessDots = new THREE.Group();
-scene.add(guessDots);
-guessDots.visible = false;
 
 function mulberry32(a) {
   return function () {

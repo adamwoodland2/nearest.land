@@ -65,6 +65,7 @@
         <h2 class="puzzle-title" id="puzzleTitle">Where on Earth?</h2>
         <p class="puzzle-sub">This is the view from a mystery shore - each colour is the country across the water on that bearing (hover or tap the wedges). Click the globe to guess where it is. Six guesses; within 100 km wins.</p>
         <svg id="puzzleChart" viewBox="-14 -14 388 388" role="img" aria-label="The mystery view over the water"></svg>
+        <p class="puzzle-wedge" id="puzzleWedge" aria-live="polite"></p>
         <ol class="puzzle-guesses" id="puzzleGuesses"></ol>
         <p class="puzzle-status" id="puzzleStatus"></p>
         <div class="puzzle-actions">
@@ -108,6 +109,7 @@
       <div class="loadbox">
         <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="progress"><div class="bar" id="bar"></div></div>
         <p id="loadmsg">Downloading the world&hellip;</p>
+        <noscript><p>This globe needs JavaScript - nothing here runs without it (and nothing is tracked with it).</p></noscript>
         <button type="button" id="skipTerrain" hidden>Load Political Only</button>
       </div>
     </div>

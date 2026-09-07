@@ -4,7 +4,7 @@
 //    dataset and three.js are precached so the whole globe works offline once loaded.
 //  - Images: CACHE-FIRST.
 //  - Bump CACHE on deploys that change any precached file.
-const CACHE = 'nl-v40';
+const CACHE = 'nl-v41';
 const CORE = [
 	'/',
 	'/index.html',
@@ -42,7 +42,9 @@ self.addEventListener('fetch', (e) => {
 				const hit = await c.match(req);
 				if (hit) return hit;
 				const res = await fetch(req);
-				if (res.ok) c.put(req, res.clone());
+				// waitUntil: without it the worker can be killed before the write lands,
+				// which made offline caching of the big map layers unreliable.
+				if (res.ok) e.waitUntil(c.put(req, res.clone()));
 				return res;
 			})
 		);
@@ -52,7 +54,7 @@ self.addEventListener('fetch', (e) => {
 	e.respondWith(
 		fetch(req)
 			.then((res) => {
-				if (res.ok) { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(req, copy)); }
+				if (res.ok) { const copy = res.clone(); e.waitUntil(caches.open(CACHE).then((c) => c.put(req, copy))); }
 				return res;
 			})
 			.catch(async () => {

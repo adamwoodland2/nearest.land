@@ -3,14 +3,15 @@
 **Live: <https://nearest.land/>**
 
 Click any coastline on a 3D globe and see which country lies across the water in every
-direction. Each of 360 compass bearings is followed along a great circle to its first landfall.
+direction. Every compass bearing (sampled each 0.25°, or 0.1° in high detail - 1,440 or
+3,600 directions) is followed along a great circle to its first landfall.
 Free, runs entirely in your browser, no account, no adverts.
 
 ## What it does
 
 - Pick a point on any coast (click, tap, a preset, or your device location). The point snaps to
   the water's edge.
-- You get a north-up polar chart: 360 one-degree wedges coloured by the country you'd reach in
+- You get a north-up polar chart of fine wedges coloured by the country you'd reach in
   that direction, blank where land is in view. Below it, one row per sector clockwise from
   north with the bearing range and the nearest distance.
 - The great-circle paths are drawn on the globe; hover a wedge, a row or a path and the three
