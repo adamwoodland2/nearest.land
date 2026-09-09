@@ -294,6 +294,12 @@ body.puzzle-open .panel { visibility: hidden; }
      globe disappears (no panel-on-panel). Pre-pick it stays, so Mode/Map/Detail and the
      explainer are still reachable by scrolling. */
   body.has-pick .panel { display: none; }
+  /* With the panel gone the page would end mid-screen and the Jump/Locate pills would float
+     oddly - let the globe fill the viewport and sit the pills just above the peek bar. */
+  body.has-pick { display: flex; flex-direction: column; height: 100dvh; overflow: hidden; }
+  body.has-pick .layout { flex: 1 1 auto; min-height: 0; }
+  body.has-pick .globe-wrap { height: 100%; min-height: 0; }
+  body.has-pick .presets { bottom: calc(env(safe-area-inset-bottom, 0px) + 78px); }
   body.sheet-open { overflow: hidden; }
   body.has-pick.sheet-open .panel { display: block; }
   body.sheet-open .panel {

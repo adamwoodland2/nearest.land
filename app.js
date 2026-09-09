@@ -943,6 +943,7 @@ function clearPick() {
   hidePeek();
   closeSheet();
   document.body.classList.remove('has-pick');
+  resize();   // the globe height changes with the class on phones
   history.replaceState(null, '', location.pathname);
   $('#jump').value = '';
   $('#viewLink').disabled = true;
@@ -1158,7 +1159,7 @@ function pick(lat, lon) {
   // re-picking miserable. A pick now just refreshes the bottom peek bar; the full results
   // open as a sheet only when the bar is tapped, so the globe stays tappable throughout.
   document.body.classList.add('has-pick');   // phones swap the in-flow panel for the peek/sheet
-  if (isPhone()) { closeSheet(); showPeek(); }
+  if (isPhone()) { closeSheet(); showPeek(); resize(); } // globe grows to fill the freed space
   return res;
 }
 
