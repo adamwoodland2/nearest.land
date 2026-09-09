@@ -940,6 +940,8 @@ function clearPick() {
   hint.textContent = 'Nothing picked. Click the globe - a coastline in Coast mode, any point on land or sea in Anywhere or Over land - or try one of the places under it.';
   place.appendChild(hint);
   lastAt = null;
+  hidePeek();
+  closeSheet();
   history.replaceState(null, '', location.pathname);
   $('#jump').value = '';
   $('#viewLink').disabled = true;
@@ -1151,10 +1153,35 @@ function pick(lat, lon) {
   // The address bar always holds a link to exactly this view.
   lastAt = `${res.at.lat.toFixed(3)},${res.at.lon.toFixed(3)}`;
   writeUrl();
-  // On a stacked (phone) layout the results are below the globe — bring them into view.
-  if (window.innerWidth < 860) document.querySelector('.panel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  // Phones (feedback 2026-09-09): scrolling the panel over the globe on every pick made
+  // re-picking miserable. A pick now just refreshes the bottom peek bar; the full results
+  // open as a sheet only when the bar is tapped, so the globe stays tappable throughout.
+  if (isPhone()) { closeSheet(); showPeek(); }
   return res;
 }
+
+const isPhone = () => window.matchMedia('(max-width: 860px)').matches;
+function showPeek() {
+  const name = ($('#place .name') || {}).textContent;
+  if (!name) return;
+  $('#peekName').textContent = name;
+  $('#peekCount').textContent = $('#legendCount').textContent.replace(/^- /, '');
+  const peek = $('#peek');
+  peek.hidden = false;
+  peek.classList.remove('pulse');
+  void peek.offsetWidth;              // restart the two-flash glow on every pick
+  peek.classList.add('pulse');
+}
+function hidePeek() { $('#peek').hidden = true; }
+function closeSheet() { document.body.classList.remove('sheet-open'); }
+$('#peek').addEventListener('click', () => {
+  document.body.classList.add('sheet-open');
+  $('#peek').hidden = true;
+});
+$('#sheetClose').addEventListener('click', () => {
+  closeSheet();
+  if (lastPick) $('#peek').hidden = false;
+});
 
 function flyTo(lat, lon) {
   controls.lookFrom(toVec(lat, lon, camera.position.length()));
