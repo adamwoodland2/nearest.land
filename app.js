@@ -942,6 +942,7 @@ function clearPick() {
   lastAt = null;
   hidePeek();
   closeSheet();
+  document.body.classList.remove('has-pick');
   history.replaceState(null, '', location.pathname);
   $('#jump').value = '';
   $('#viewLink').disabled = true;
@@ -1156,9 +1157,17 @@ function pick(lat, lon) {
   // Phones (feedback 2026-09-09): scrolling the panel over the globe on every pick made
   // re-picking miserable. A pick now just refreshes the bottom peek bar; the full results
   // open as a sheet only when the bar is tapped, so the globe stays tappable throughout.
+  document.body.classList.add('has-pick');   // phones swap the in-flow panel for the peek/sheet
   if (isPhone()) { closeSheet(); showPeek(); }
   return res;
 }
+
+// Crossing the 860px breakpoint with a pick active: keep exactly one results pathway alive.
+window.matchMedia('(max-width: 860px)').addEventListener('change', (e) => {
+  if (!lastPick) return;
+  if (e.matches) showPeek();
+  else { closeSheet(); hidePeek(); }
+});
 
 const isPhone = () => window.matchMedia('(max-width: 860px)').matches;
 function showPeek() {
