@@ -33,7 +33,11 @@ body {
 }
 @media (max-width: 860px) {
   /* Phones: the page scrolls as a whole; the globe takes a fixed share of the screen and the
-     results flow underneath at full height (no inner scrolling strip). */
+     results flow underneath at full height (no inner scrolling strip). The stable scrollbar
+     gutter matters on narrow DESKTOP windows: picking sets overflow hidden, and without it
+     the classic scrollbar's removal widens the canvas and shifts the globe sideways
+     (overlay-scrollbar phones are unaffected either way). */
+  html { scrollbar-gutter: stable; }
   html, body { height: auto; min-height: 100%; }
   body { display: block; }
   .top { padding: 12px 16px 6px; }

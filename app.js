@@ -643,6 +643,71 @@ if (qs.has('debug')) {
 }
 const globe = new THREE.Mesh(new THREE.SphereGeometry(1, 128, 96), new THREE.MeshBasicMaterial({ map: texture }));
 
+// ------------------------------------------------------- satellite space dressing
+// Satellite mode gets the classic "pretty WebGL earth" treatment: a lit globe with
+// glinting oceans, a fresnel atmosphere rim, and a starfield. Political and terrain stay
+// flat-lit and unchanged. Everything here is generated client-side - no extra downloads.
+const basicMat = globe.material;
+let phongMat = null, atmosphere = null, stars = null, keyLight = null, fillLight = null;
+
+// Water = shiny, land = matte, classified from the imagery itself at low resolution
+// (Blue Marble oceans are strongly blue-dominant).
+function buildSpecularMask(bitmap) {
+  const w = 1024, h = 512;
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const ctx = c.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(bitmap, 0, 0, w, h);
+  const img = ctx.getImageData(0, 0, w, h), d = img.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const water = d[i + 2] > d[i] + 8 && d[i + 2] > d[i + 1] - 4 && d[i + 2] > 20;
+    d[i] = d[i + 1] = d[i + 2] = water ? 255 : 25;
+    d[i + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+  const tex = new THREE.CanvasTexture(c);
+  tex.flipY = false; // the source bitmap is already flipped to match the globe's UVs
+  return tex;
+}
+
+function ensureDressing() {
+  if (atmosphere) return;
+  keyLight = new THREE.DirectionalLight(0xffffff, 1.25);
+  fillLight = new THREE.AmbientLight(0xffffff, 0.8); // high floor: a real terminator would hide half the analysis
+  scene.add(keyLight, fillLight);
+  // Fresnel rim on an oversized back-face sphere; the opaque globe depth-occludes the middle,
+  // leaving an additive blue halo around the limb.
+  atmosphere = new THREE.Mesh(
+    new THREE.SphereGeometry(1.14, 96, 64),
+    new THREE.ShaderMaterial({
+      vertexShader: 'varying vec3 vN; void main() { vN = normalize(normalMatrix * normal); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+      fragmentShader: 'varying vec3 vN; void main() { float d = max(0.0, 0.68 - dot(vN, vec3(0.0, 0.0, 1.0))); gl_FragColor = vec4(0.30, 0.52, 1.0, 1.0) * pow(d, 3.0) * 1.6; }',
+      side: THREE.BackSide, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false,
+    }),
+  );
+  scene.add(atmosphere);
+  // Starfield: deterministic scatter on a far shell, slight warm/cool colour variation.
+  const N = 2600, pos = new Float32Array(N * 3), col = new Float32Array(N * 3);
+  const rnd = mulberry32(42);
+  for (let i = 0; i < N; i++) {
+    const u = rnd() * 2 - 1, t = rnd() * Math.PI * 2, s = Math.sqrt(1 - u * u), R = 34 + rnd() * 10;
+    pos[i * 3] = s * Math.cos(t) * R; pos[i * 3 + 1] = u * R; pos[i * 3 + 2] = s * Math.sin(t) * R;
+    const b = 0.35 + rnd() * 0.65, warm = rnd();
+    col[i * 3] = b; col[i * 3 + 1] = b * (0.9 + warm * 0.1); col[i * 3 + 2] = b * (0.85 + (1 - warm) * 0.15);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  stars = new THREE.Points(g, new THREE.PointsMaterial({ size: 0.16, sizeAttenuation: true, vertexColors: true, transparent: true, opacity: 0.9, depthWrite: false }));
+  scene.add(stars);
+}
+
+function setDressing(on) {
+  if (on) ensureDressing();
+  if (!atmosphere) return;
+  atmosphere.visible = stars.visible = keyLight.visible = fillLight.visible = on;
+}
+
 // ------------------------------------------------------------------ display layers
 // 'political' is the generated per-country texture above; 'terrain' is Natural Earth I
 // (public domain) and 'satellite' NASA Blue Marble Next Generation (Aug 2004, topography +
@@ -699,7 +764,18 @@ async function applyLayer(onPct, signal) {
     if (LAYER !== want) return true; // switched again while downloading
     map = layerTex[want];
   }
-  if (globe.material.map !== map) { globe.material.map = map; globe.material.needsUpdate = true; }
+  if (want === 'satellite') {
+    if (!phongMat) {
+      phongMat = new THREE.MeshPhongMaterial({ specular: new THREE.Color(0x44536a), shininess: 34 });
+      phongMat.specularMap = buildSpecularMask(layerTex.satellite.image);
+    }
+    if (phongMat.map !== map) { phongMat.map = map; phongMat.needsUpdate = true; }
+    globe.material = phongMat;
+  } else {
+    if (basicMat.map !== map) { basicMat.map = map; basicMat.needsUpdate = true; }
+    globe.material = basicMat;
+  }
+  setDressing(want === 'satellite');
   // Dark coastlines/borders vanish on the dark Blue Marble imagery - lighten them there.
   if (borders) {
     borders.material.color.set(want === 'satellite' ? 0xcfd9e4 : 0x0a0f1a);
@@ -821,6 +897,20 @@ function resize() {
   const w = canvas.clientWidth, h = canvas.clientHeight;
   renderer.setSize(w, h, false);
   camera.aspect = w / h;
+  // Phones with a pick active: the canvas grew from 56vh to the full viewport, but the
+  // globe must not appear to move or zoom. The camera stays exactly where it is; a wider
+  // FOV cancels the height change (a pure uniform rescale of the projection - unlike moving
+  // the camera, no parallax, so every feature keeps its exact pixel) and a view offset pins
+  // the centre where it was. Raycasting, labels and dragging all read the same projection.
+  const BASE_FOV = 40;
+  if (document.body.classList.contains('has-pick') && window.matchMedia('(max-width: 860px)').matches) {
+    const h0 = Math.max(300, window.innerHeight * 0.56); // the pre-pick .globe-wrap height rule
+    camera.fov = (2 * Math.atan(Math.tan(BASE_FOV / 2 * Math.PI / 180) * Math.max(1, h / h0))) * 180 / Math.PI;
+    camera.setViewOffset(w, h, 0, Math.max(0, (h - h0) / 2), w, h);
+  } else {
+    camera.fov = BASE_FOV;
+    camera.clearViewOffset();
+  }
   camera.updateProjectionMatrix();
 }
 window.addEventListener('resize', resize);
@@ -870,6 +960,16 @@ function frame() {
   // Drag rotation slows down as you zoom in, so the globe moves under the cursor at the same pace.
   controls.rotateSpeed = Math.min(0.6, Math.max(0.03, 0.6 * (camera.position.length() - 1) / 1.9));
   gpsRing.scale.setScalar(s);
+  // Satellite key light rides up-left of the camera, so relief and ocean glints move with
+  // the view and nothing is ever in darkness.
+  if (keyLight && keyLight.visible) {
+    const e = camera.matrixWorld.elements; // columns: right (0..2), up (4..6)
+    keyLight.position.set(
+      camera.position.x + e[4] * 1.4 - e[0] * 2.0,
+      camera.position.y + e[5] * 1.4 - e[1] * 2.0,
+      camera.position.z + e[6] * 1.4 - e[2] * 2.0,
+    );
+  }
   updateLabels();
   renderer.render(scene, camera);
   requestAnimationFrame(frame);
@@ -942,8 +1042,7 @@ function clearPick() {
   lastAt = null;
   hidePeek();
   closeSheet();
-  document.body.classList.remove('has-pick');
-  resize();   // the globe height changes with the class on phones
+  setHasPick(false);
   history.replaceState(null, '', location.pathname);
   $('#jump').value = '';
   $('#viewLink').disabled = true;
@@ -1158,9 +1257,16 @@ function pick(lat, lon) {
   // Phones (feedback 2026-09-09): scrolling the panel over the globe on every pick made
   // re-picking miserable. A pick now just refreshes the bottom peek bar; the full results
   // open as a sheet only when the bar is tapped, so the globe stays tappable throughout.
-  document.body.classList.add('has-pick');   // phones swap the in-flow panel for the peek/sheet
-  if (isPhone()) { closeSheet(); showPeek(); resize(); } // globe grows to fill the freed space
+  setHasPick(true);   // phones swap the in-flow panel for the peek/sheet
+  if (isPhone()) { closeSheet(); showPeek(); }
   return res;
+}
+
+// Toggling has-pick changes the globe canvas height on phones (56vh <-> full viewport).
+// resize() compensates with FOV + view offset so every pixel of the globe stays put.
+function setHasPick(on) {
+  document.body.classList.toggle('has-pick', on);
+  resize();
 }
 
 // Crossing the 860px breakpoint with a pick active: keep exactly one results pathway alive.
