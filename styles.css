@@ -27,6 +27,10 @@ body {
 .brand-tag { font-size: 13px; font-weight: 400; letter-spacing: 0; color: var(--muted); margin-left: 6px; }
 @media (max-width: 600px) { .brand-tag { display: block; margin: 2px 0 0; font-size: 12px; } }
 .top .sub { color: var(--muted); font-size: 14px; flex: 1 1 400px; }
+/* align-items:center centres each flex item's BOX, so the 14px .sub and the 20px h1 end
+   up on different baselines (.sub rode 3.6px high). Put just the two text items in a
+   baseline group - the buttons keep centring, which is what they want. */
+.top .brand, .top .sub { align-self: baseline; }
 .debug-strip { width: 100%; max-width: 1200px; border: 1px solid var(--line); display: block; }
 
 .layout {
