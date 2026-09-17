@@ -1037,7 +1037,7 @@ function clearPick() {
   const place = $('#place');
   place.replaceChildren();
   const hint = document.createElement('p'); hint.className = 'hint';
-  hint.textContent = 'Nothing picked. Click the globe - a coastline in Coast mode, any point on land or sea in Anywhere or Over land - or try one of the places under it.';
+  hint.textContent = 'Nothing picked. Click the globe to see what is directly across the ocean from that spot - a coastline in Coast mode, any point on land or sea in Anywhere or Over land - or try one of the places under it.';
   place.appendChild(hint);
   lastAt = null;
   hidePeek();

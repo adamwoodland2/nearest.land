@@ -3,15 +3,15 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Nearest Land - what's across the water from any coastline</title>
-  <meta name="description" content="Click any coastline on a 3D globe and see which country lies across the water in every direction - each compass bearing followed along a great circle to its first landfall. Free, runs in your browser." />
-  <meta name="keywords" content="what's across the ocean, across the water, opposite coast, great circle, first landfall, beyond the sea map, what country is across the sea, interactive globe" />
+  <title>Nearest Land - what's directly across the ocean from any coastline</title>
+  <meta name="description" content="What is directly across the ocean from you? Click any coastline on a 3D globe and see which country lies across the water in every direction - each bearing followed along a great circle to its first landfall, with your antipode marked. Free, runs in your browser." />
+  <meta name="keywords" content="what's directly across the ocean, what country is across the ocean from me, across the sea from here, opposite coast, antipode finder, great circle, first landfall, beyond the sea map, interactive globe" />
   <link rel="canonical" href="https://nearest.land/" />
 
   <meta property="og:type"        content="website" />
   <meta property="og:url"         content="https://nearest.land/" />
   <meta property="og:site_name"   content="nearest.land" />
-  <meta property="og:title"       content="Nearest Land - what's across the water from any coastline" />
+  <meta property="og:title"       content="Nearest Land - what's directly across the ocean from any coastline" />
   <meta property="og:description" content="Click a coastline on a 3D globe. Every direction over the sea is followed along a great circle to its first landfall - and the answers are not what you'd guess." />
   <meta property="og:image"       content="https://nearest.land/og-image.png" />
   <meta property="og:image:width"  content="1200" />
@@ -19,7 +19,7 @@
   <meta property="og:image:alt"   content="nearest.land - a 360-degree view chart showing which countries lie across the water" />
   <meta property="og:locale"      content="en_GB" />
   <meta name="twitter:card"        content="summary_large_image" />
-  <meta name="twitter:title"       content="Nearest Land - what's across the water from any coastline" />
+  <meta name="twitter:title"       content="Nearest Land - what's directly across the ocean from any coastline" />
   <meta name="twitter:description" content="Click a coastline on a 3D globe." />
   <meta name="twitter:image"       content="https://nearest.land/og-image.png" />
 
@@ -45,11 +45,67 @@
     "offers": { "@type": "Offer", "price": "0", "priceCurrency": "GBP" }
   }
   </script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "What is directly across the ocean from me?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Pick your own stretch of coast on the globe - or press Request Location on a phone - and every one of the 360 directions out to sea is followed to the country it reaches. On a phone you can then hold the device up and read off whatever lies across the water in the direction you are facing."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Is “across the ocean” not just due east or west?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "No, and that is the whole point. Sailing a constant compass bearing is not the shortest path across a sphere; a great circle is. Follow one properly and the answers stop being obvious: Land's End in England faces Brazil, Perth in Australia faces Africa, and a beach in New York faces Australia."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "What is an antipode, and where is mine?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Your antipode is the point on the exact opposite side of the Earth - dig straight down and you would surface there. Every pick marks and names its antipode on the globe. Bearings that run past it keep going until they hit land."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "How accurate is it?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Close enough to trust for the shape of the answer, not for navigation. The analysis grid is roughly 10 km and directions are sampled every quarter degree, so very small islands and very narrow straits can be missed or merged."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Where does the map data come from?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Country outlines and the Terrain map are Natural Earth 1:10m (public domain); the Satellite map is NASA Blue Marble (public domain). Everything is computed in your browser."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Is it free, and does it work on a phone?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Free, open source under the MIT licence, and no tracking of any kind. It installs as a web app on phones and desktops and keeps working offline once loaded."
+        }
+      }
+    ]
+  }
+  </script>
 </head>
 <body>
 
 <header class="top">
-  <h1 class="brand">nearest<span class="brand-tld">.land</span></h1>
+  <h1 class="brand">nearest<span class="brand-tld">.land</span> <span class="brand-tag">what's directly across the ocean?</span></h1>
   <p class="sub">Click to pick a point - a coast in Coast mode, anywhere in the other modes · right-drag to turn · scroll to zoom · touch: tap, drag, pinch.</p>
   <span class="viewlink-wrap"><button type="button" class="daily-btn" id="daily">Daily puzzle</button><button type="button" class="viewlink" id="viewLink" disabled title="Pick a point first">Share this view</button><span class="viewlink-status" id="viewLinkStatus"></span></span>
 </header>
@@ -154,7 +210,7 @@
   <aside class="panel" aria-live="polite">
     <button type="button" class="sheet-close" id="sheetClose">▾ Back to the map</button>
     <div class="place" id="place">
-      <p class="hint">Nothing picked yet. Click the globe - a coastline in Coast mode, any point on land or sea in Anywhere or Over land - or try one of the places under it.</p>
+      <p class="hint">Nothing picked yet. Click the globe to see what is directly across the ocean from that spot, in all 360 directions, with its antipode named - a coastline in Coast mode, any point on land or sea in Anywhere or Over land - or try one of the places under it.</p>
     </div>
     <div class="chart-wrap">
       <svg id="chart" viewBox="0 0 360 360" role="img" aria-label="360-degree view over the water"></svg>
@@ -183,9 +239,26 @@
       </label>
     </p>
     <ol class="legend" id="legend"></ol>
-    <p class="note"><strong>Three modes.</strong> <em>Coast</em> snaps your pick to the water's edge and follows each direction across the sea to its first landfall; land within about 20 km in a direction counts as "land in view" and is left blank. <em>Anywhere</em> starts from the exact point you tapped, on land or at sea, and follows each direction to the first land that is not the country you are standing in - so from Berlin, east is Poland at 80 km. <em>Over land</em> does the same but never crosses water: a direction that reaches the sea first is left blank.</p>
-    <p class="note"><strong>Not 100% accurate, by nature.</strong> The analysis grid is roughly 10 km, and that cuts both ways. Islands smaller than a grid cell are kept deliberately as a single cell so they still count (Tristan da Cunha, Bermuda, the Maldives) - but that draws them as a square, and an island closer than about 10 km to a coast merges with it, so in Over land mode Kinmen reads as joined to mainland China and Taiwan appears reachable over land. In the other direction, straits and inlets narrower than about 10 km can vanish, and the exact point you "stand" on is snapped to the grid. Directions are sampled every quarter of a degree - a spread of about 22 km at 5,000 km and 65 km at 15,000 km, so a distant island narrower than that can slip between two bearings. The Detail selector's 0.1° setting narrows that to about 9 km and 26 km, at roughly 2.5&times; the compute per pick.</p>
+    <div class="note note-first"><h2 class="note-h">Three modes.</h2> <em>Coast</em> snaps your pick to the water's edge and follows each direction across the sea to its first landfall; land within about 20 km in a direction counts as "land in view" and is left blank. <em>Anywhere</em> starts from the exact point you tapped, on land or at sea, and follows each direction to the first land that is not the country you are standing in - so from Berlin, east is Poland at 80 km. <em>Over land</em> does the same but never crosses water: a direction that reaches the sea first is left blank.</div>
+    <div class="note"><h2 class="note-h">Not 100% accurate, by nature.</h2> The analysis grid is roughly 10 km, and that cuts both ways. Islands smaller than a grid cell are kept deliberately as a single cell so they still count (Tristan da Cunha, Bermuda, the Maldives) - but that draws them as a square, and an island closer than about 10 km to a coast merges with it, so in Over land mode Kinmen reads as joined to mainland China and Taiwan appears reachable over land. In the other direction, straits and inlets narrower than about 10 km can vanish, and the exact point you "stand" on is snapped to the grid. Directions are sampled every quarter of a degree - a spread of about 22 km at 5,000 km and 65 km at 15,000 km, so a distant island narrower than that can slip between two bearings. The Detail selector's 0.1° setting narrows that to about 9 km and 26 km, at roughly 2.5&times; the compute per pick.</div>
     <p class="note">There is also no such thing as <em>the</em> coastline. This is the <a href="https://en.wikipedia.org/wiki/Coastline_paradox" target="_blank" rel="noopener">coastline paradox</a>: the finer you measure a coast, the longer it gets, without limit - every bay contains smaller bays. So any answer depends on the map's level of detail. Here it is Natural Earth's 1:10m outlines (public domain), which is generous for a globe and coarse for a beach.</p>
+  <details class="faq">
+    <summary>Frequently asked questions</summary>
+    <div class="faq-body">
+      <h3>What is directly across the ocean from me?</h3>
+      <p>Pick your own stretch of coast on the globe - or press Request Location on a phone - and every one of the 360 directions out to sea is followed to the country it reaches. On a phone you can then hold the device up and read off whatever lies across the water in the direction you are facing.</p>
+      <h3>Is "across the ocean" not just due east or west?</h3>
+      <p>No, and that is the whole point. Sailing a constant compass bearing is not the shortest path across a sphere; a great circle is. Follow one properly and the answers stop being obvious: Land's End in England faces Brazil, Perth in Australia faces Africa, and a beach in New York faces Australia. Maps that answer with "due east" give a different, and less truthful, answer.</p>
+      <h3>What is an antipode, and where is mine?</h3>
+      <p>Your antipode is the point on the exact opposite side of the Earth - dig straight down and you would surface there. Every pick marks and names its antipode on the globe. Bearings that run past it keep going until they hit land, which is why a single direction can cross an entire ocean and arrive somewhere unexpected.</p>
+      <h3>How accurate is it?</h3>
+      <p>Close enough to trust for the shape of the answer, not for navigation. The analysis grid is roughly 10 km and directions are sampled every quarter degree (or every tenth, on the Detail setting), so very small islands and very narrow straits can be missed or merged - see the note above for the full caveats.</p>
+      <h3>Where does the map data come from?</h3>
+      <p>Country outlines and the Terrain map are Natural Earth 1:10m (public domain); the Satellite map is NASA Blue Marble (public domain). Everything is computed in your browser from those outlines - there is no server doing the work.</p>
+      <h3>Is it free, and does it work on a phone?</h3>
+      <p>Free, open source under the MIT licence, and no tracking of any kind. It installs as a web app on phones and desktops and keeps working offline once loaded.</p>
+    </div>
+  </details>
     <p class="note contact">Free, open source (MIT), nothing tracked. Questions or corrections: <a href="mailto:adam@nearest.land">adam@nearest.land</a></p>
     <p class="note">Like this? Also see <a href="https://orrery.live/">orrery.live</a> for a 3D tour of the solar system.</p>
     <p class="note credits">Built with <a href="https://threejs.org/" target="_blank" rel="noopener">three.js</a> (MIT) and <a href="https://github.com/topojson/topojson-client" target="_blank" rel="noopener">topojson-client</a> (ISC). Country outlines and the Terrain map: <a href="https://www.naturalearthdata.com/" target="_blank" rel="noopener">Natural Earth</a> (public domain), outlines via <a href="https://github.com/topojson/world-atlas" target="_blank" rel="noopener">world-atlas</a> (ISC). Satellite map: <a href="https://visibleearth.nasa.gov/collection/1484/blue-marble" target="_blank" rel="noopener">NASA Blue Marble</a> (public domain). Code: <a href="LICENSE">MIT licence</a>.</p>
