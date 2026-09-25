@@ -789,6 +789,9 @@ let lastAt = null;
 function writeUrl() {
   if (!lastAt) return;
   history.replaceState(null, '', `?at=${lastAt}${MODE !== 'coast' ? `&mode=${MODE}` : ''}${STEP !== 0.25 ? `&step=${STEP}` : ''}${LAYER !== 'political' ? `&layer=${LAYER}` : ''}`);
+  // the picked point's forecast on meanweather.net (same ?at=lat,lon convention)
+  const wl = $('#weatherLink');
+  if (wl) { wl.href = `https://meanweather.net/?at=${lastAt}`; wl.hidden = false; }
 }
 const layerStatus = $('#layerStatus');
 function setLayer(layer) {
@@ -1046,6 +1049,8 @@ function clearPick() {
   history.replaceState(null, '', location.pathname);
   $('#jump').value = '';
   $('#viewLink').disabled = true;
+  const wl = $('#weatherLink');
+  if (wl) wl.hidden = true;
   $('#viewLink').title = 'Pick a point first';
   $('#viewLinkStatus').textContent = '';
 }

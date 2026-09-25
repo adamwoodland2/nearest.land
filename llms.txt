@@ -20,4 +20,6 @@ Technical: static site, three.js, MIT licensed, installable PWA that works offli
 ## Related
 
 - [orrery.live](https://orrery.live/): interactive 3D solar system by the same author
-- [quickresponse.now](https://quickresponse.now/): free QR code generator by the same author
+- [meanweather.net](https://meanweather.net/): the "Weather here" button opens the forecast for the picked point (nine models compared)
+- [Adam's Arcade](https://games.adamwoodland.com/): all of the author's free browser games and tools
+- [Adam Woodland](https://adamwoodland.com/): the author, an OT/ICS cybersecurity consultant; this site is a side project
