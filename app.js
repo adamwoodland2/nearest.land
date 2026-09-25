@@ -786,12 +786,14 @@ async function applyLayer(onPct, signal) {
 const layerSel = $('#layer');
 // The shareable URL: the picked point plus any non-default mode and map layer.
 let lastAt = null;
+let lastWeatherName = '';   // "Country (33.87°S, 151.21°E)" for the meanweather.net link
 function writeUrl() {
   if (!lastAt) return;
   history.replaceState(null, '', `?at=${lastAt}${MODE !== 'coast' ? `&mode=${MODE}` : ''}${STEP !== 0.25 ? `&step=${STEP}` : ''}${LAYER !== 'political' ? `&layer=${LAYER}` : ''}`);
   // the picked point's forecast on meanweather.net (same ?at=lat,lon convention)
   const wl = $('#weatherLink');
-  if (wl) { wl.href = `https://meanweather.net/?at=${lastAt}`; wl.hidden = false; }
+  // tmp=1: meanweather.net shows the place without adding it to its recent-places tabs
+  if (wl) { wl.href = `https://meanweather.net/?at=${lastAt}&n=${encodeURIComponent(lastWeatherName)}&tmp=1`; wl.hidden = false; }
 }
 const layerStatus = $('#layerStatus');
 function setLayer(layer) {
@@ -1251,7 +1253,9 @@ function pick(lat, lon) {
       ? (res.home ? `${names[res.home]} - ${fmtDeg(open)} reaches another country over land` : 'At sea - nothing to reach over land')
       : `${names[res.home]} - ${fmtDeg(open)} of open water`;
   const co = document.createElement('p'); co.className = 'coords';
-  co.textContent = `${Math.abs(res.at.lat).toFixed(2)}°${res.at.lat >= 0 ? 'N' : 'S'}, ${Math.abs(res.at.lon).toFixed(2)}°${res.at.lon >= 0 ? 'E' : 'W'} · computed in ${Math.round(performance.now() - t0)} ms`;
+  const coordsText = `${Math.abs(res.at.lat).toFixed(2)}°${res.at.lat >= 0 ? 'N' : 'S'}, ${Math.abs(res.at.lon).toFixed(2)}°${res.at.lon >= 0 ? 'E' : 'W'}`;
+  co.textContent = `${coordsText} · computed in ${Math.round(performance.now() - t0)} ms`;
+  lastWeatherName = `${res.home ? names[res.home] : 'At sea'} (${coordsText})`;
   place.append(nm, co);
   $('#viewLink').disabled = false;
   $('#viewLink').title = 'Copy or share a link to this view';
